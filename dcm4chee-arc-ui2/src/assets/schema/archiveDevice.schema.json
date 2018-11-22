@@ -5,6 +5,7 @@
   "required": [
     "dcmFuzzyAlgorithmClass",
     "dcmSeriesMetadataFetchSize",
+    "dcmSeriesMetadataThreads",
     "dcmPurgeInstanceRecords",
     "dcmPurgeInstanceRecordsFetchSize",
     "dcmOverwritePolicy",
@@ -23,6 +24,7 @@
     "dcmFallbackCMoveSCPRetries",
     "dcmExportTaskFetchSize",
     "dcmPurgeStorageFetchSize",
+    "dcmFailedToDeleteFetchSize",
     "dcmDeleteStudyBatchSize",
     "dcmDeletePatientOnDeleteLastStudy",
     "dcmDeleteRejectedFetchSize",
@@ -49,6 +51,9 @@
     "dcmStorageVerificationFetchSize",
     "dcmCompressionThreads",
     "dcmCompressionFetchSize",
+    "dcmPatientVerificationFetchSize",
+    "dcmPatientVerificationAdjustIssuerOfPatientID",
+    "dcmPatientVerificationMaxRetries",
     "dcmQueueTasksFetchSize",
     "hl7PSUMWL",
     "hl7PSUOnTimeout",
@@ -82,13 +87,13 @@
     },
     "dcmSeriesMetadataDelay": {
       "title": "Aggregate Series Metadata Delay",
-      "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS for storing aggregated Series Metadata on storage. If absent, no aggregated Series Metadata will be stored.",
+      "description": "Delay in ISO-8601 duration format PnDTnHnMnS for storing aggregated Series Metadata on storage. If absent, no aggregated Series Metadata will be stored.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmSeriesMetadataPollingInterval": {
       "title": "Update Series Metadata Polling Interval",
-      "description": "Polling Interval for Series scheduled for Metadata update in ISO-8601 duration format PnDTnHnMn.nS. If absent, no aggregated Series Metadata will be stored.",
+      "description": "Polling Interval for Series scheduled for Metadata update in ISO-8601 duration format PnDTnHnMnS. If absent, no aggregated Series Metadata will be stored.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -100,6 +105,14 @@
       "minimum": 0,
       "exclusiveMinimum": true
     },
+    "dcmSeriesMetadataThreads": {
+      "title": "Update Series Metadata Threads",
+      "description": "Number of Threads used for creation and update of Series Metadata.",
+      "type": "integer",
+      "default" : 1,
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
     "dcmPurgeInstanceRecords": {
       "title": "Purge Instance Records",
       "description": "Indicates that Instance Records may be purged from the DB.",
@@ -108,13 +121,13 @@
     },
     "dcmPurgeInstanceRecordsDelay": {
       "title": "Purge Instance Records Delay",
-      "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS for purging Instance Records from the DB. May be overwritten by configured values for particular Archive Network AEs. Only effective, if Purge Instance Records = true.",
+      "description": "Delay in ISO-8601 duration format PnDTnHnMnS for purging Instance Records from the DB. May be overwritten by configured values for particular Archive Network AEs. Only effective, if Purge Instance Records = true.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmPurgeInstanceRecordsPollingInterval": {
       "title": "Purge Instance Records Polling Interval",
-      "description": "Polling Interval for Series scheduled for purging Instance Records from the DB in ISO-8601 duration format PnDTnHnMn.nS. Only effective, if Purge Instance Records = true.",
+      "description": "Polling Interval for Series scheduled for purging Instance Records from the DB in ISO-8601 duration format PnDTnHnMnS. Only effective, if Purge Instance Records = true.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -205,7 +218,7 @@
     },
     "dcmSendPendingCMoveInterval": {
       "title": "Send Pending C-Move Interval",
-      "description": "Interval of pending C-MOVE responses in ISO-8601 duration format PnDTnHnMn.nS; disabled if absent. May be overwritten by configured values for particular Archive Network AEs.",
+      "description": "Interval of pending C-MOVE responses in ISO-8601 duration format PnDTnHnMnS; disabled if absent. May be overwritten by configured values for particular Archive Network AEs.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -274,13 +287,13 @@
     },
     "dcmIanDelay": {
       "title": "IAN Delay",
-      "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS after which an IAN for a received study is sent to configured IAN destinations. If absent, IANs are triggered by received MPPS. May be overwritten by configured values for particular Archive Network AEs.",
+      "description": "Delay in ISO-8601 duration format PnDTnHnMnS after which an IAN for a received study is sent to configured IAN destinations. If absent, IANs are triggered by received MPPS. May be overwritten by configured values for particular Archive Network AEs.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmIanTimeout": {
       "title": "IAN Timeout",
-      "description": "Timeout in ISO-8601 duration format PnDTnHnMn.nS for waiting on receive of instances referenced in MPPS; check for completeness forever if absent. May be overwritten by configured values for particular Archive Network AEs.",
+      "description": "Timeout in ISO-8601 duration format PnDTnHnMnS for waiting on receive of instances referenced in MPPS; check for completeness forever if absent. May be overwritten by configured values for particular Archive Network AEs.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -292,7 +305,7 @@
     },
     "dcmIanTaskPollingInterval": {
       "title": "IAN Task Polling Interval",
-      "description": "Polling Interval for IAN Tasks in ISO-8601 duration format PnDTnHnMn.nS. IAN disabled, if absent",
+      "description": "Polling Interval for IAN Tasks in ISO-8601 duration format PnDTnHnMnS. IAN disabled, if absent",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -357,7 +370,8 @@
       "title": "Fallback C-Move SCP Retries",
       "description": "Maximal number of retries to retrieve not available objects from C-MOVE SCP configured by dcmFallbackCMoveSCP. -1 = forever.",
       "type": "integer",
-      "default": 0
+      "default": 0,
+      "minimum": -1
     },
     "dcmAltCMoveSCP": {
       "title": "Alternative C-Move SCP",
@@ -367,7 +381,7 @@
     },
     "dcmExportTaskPollingInterval": {
       "title": "Export Task Polling Interval",
-      "description": "Export Task Polling Interval in ISO-8601 duration format PnDTnHnMn.nS",
+      "description": "Export Task Polling Interval in ISO-8601 duration format PnDTnHnMnS.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -381,13 +395,27 @@
     },
     "dcmPurgeStoragePollingInterval": {
       "title": "Purge Storage Polling Interval",
-      "description": "Polling Interval for deleting objects in ISO-8601 duration format PnDTnHnMn.nS",
+      "description": "Polling Interval for deleting objects in ISO-8601 duration format PnDTnHnMnS.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmPurgeStorageFetchSize": {
       "title": "Purge Storage Fetch Size",
       "description": "Maximal number of objects to delete in one task.",
+      "type": "integer",
+      "default": 100,
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
+    "dcmFailedToDeletePollingInterval": {
+      "title": "Failed to delete Polling Interval",
+      "description": "Polling Interval for resolving deletion failures in ISO-8601 duration format PnDTnHnMnS.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
+    "dcmFailedToDeleteFetchSize": {
+      "title": "Failed to delete Fetch Size",
+      "description": "Maximal number of Location records fetched for resolving deletion failures in one query.",
       "type": "integer",
       "default": 100,
       "minimum": 0,
@@ -409,7 +437,7 @@
     },
     "dcmDeleteRejectedPollingInterval": {
       "title": "Delete Rejected Polling Interval",
-      "description": "Polling Interval for deleting rejected instances from the DB in ISO-8601 duration format PnDTnHnMn.nS",
+      "description": "Polling Interval for deleting rejected instances from the DB in ISO-8601 duration format PnDTnHnMnS.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -423,19 +451,19 @@
     },
     "dcmMaxAccessTimeStaleness": {
       "title": "Maximum Access Time Staleness",
-      "description": "Maximal staleness of recorded study accession time in ISO-8601 duration format PnDTnHnMn.nS. Update of the access time disabled, if absent.",
+      "description": "Maximal staleness of recorded study accession time in ISO-8601 duration format PnDTnHnMnS. Update of the access time disabled, if absent.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmAECacheStaleTimeout": {
       "title": "AE Cache Stale Timeout",
-      "description": "Maximal staleness of cached AE in ISO-8601 duration format PnDTnHnMn.nS. If absent, cached AE entries will not be refetched from LDAP.",
+      "description": "Maximal staleness of cached AE in ISO-8601 duration format PnDTnHnMnS. If absent, cached AE entries will not be refetched from LDAP.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmLeadingCFindSCPQueryCacheStaleTimeout": {
       "title": "Leading C-Find SCP Query Cache Stale Timeout",
-      "description": "Maximal staleness of cached Patient and Study attributes fetched from leading C-Find SCP in ISO-8601 duration format PnDTnHnMn.nS. If absent, cache Study attributes are only removed on reaching the maximal cache size.",
+      "description": "Maximal staleness of cached Patient and Study attributes fetched from leading C-Find SCP in ISO-8601 duration format PnDTnHnMnS. If absent, cache Study attributes are only removed on reaching the maximal cache size.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -455,13 +483,13 @@
     },
     "dcmAuditPollingInterval": {
       "title": "Audit Polling Interval",
-      "description": "Polling Interval for aggregating Audit Messages in ISO-8601 duration format PnDTnHnMn.nS. Audit Message aggregation disabled, if absent.",
+      "description": "Polling Interval for aggregating Audit Messages in ISO-8601 duration format PnDTnHnMnS. Audit Message aggregation disabled, if absent.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmAuditAggregateDuration": {
       "title": "Audit Aggregate Duration",
-      "description": "Audit Message Aggregation Duration in ISO-8601 duration format PnDTnHnMn.nS. Audit Message aggregation disabled, if absent.",
+      "description": "Audit Message Aggregation Duration in ISO-8601 duration format PnDTnHnMnS. Audit Message aggregation disabled, if absent.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -569,7 +597,7 @@
     },
     "dcmPurgeQueueMessagePollingInterval": {
       "title": "Purge Queue Messages Polling Interval",
-      "description": "Polling Interval for purging queue messages in ISO-8601 duration format PnDTnHnMn.nS. If absent, there is no deletion",
+      "description": "Polling Interval for purging queue messages in ISO-8601 duration format PnDTnHnMnS. If absent, there is no deletion",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -581,7 +609,7 @@
     },
     "dcmRejectExpiredStudiesPollingInterval": {
       "title": "Reject Expired Studies Polling Interval",
-      "description": "Polling Interval for rejecting expired Studies and Series in ISO-8601 duration format PnDTnHnMn.nS. If absent, neither expired Studies nor Series will be rejected automatically",
+      "description": "Polling Interval for rejecting expired Studies and Series in ISO-8601 duration format PnDTnHnMnS. If absent, neither expired Studies nor Series will be rejected automatically",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -623,7 +651,7 @@
     },
     "dcmStorePermissionCacheStaleTimeout": {
       "title": "Store Permission Cache Stale Timeout",
-      "description": "Maximal staleness of cached responses from Storage Permission Service in ISO-8601 duration format PnDTnHnMn.nS. If absent, cached responses are only removed on reaching the maximal cache size.",
+      "description": "Maximal staleness of cached responses from Storage Permission Service in ISO-8601 duration format PnDTnHnMnS. If absent, cached responses are only removed on reaching the maximal cache size.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -637,7 +665,7 @@
     },
     "dcmMergeMWLCacheStaleTimeout": {
       "title": "Merge MWL Cache Stale Timeout",
-      "description": "Maximal staleness of Request Attributes extracted from matching DICOM MWL items in ISO-8601 duration format PnDTnHnMn.nS. If absent, cached Request Attributes are only removed on reaching the maximal cache size.",
+      "description": "Maximal staleness of Request Attributes extracted from matching DICOM MWL items in ISO-8601 duration format PnDTnHnMnS. If absent, cached Request Attributes are only removed on reaching the maximal cache size.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -703,13 +731,13 @@
     },
     "dcmPurgeStgCmtCompletedDelay": {
       "title": "Purge Storage Commitment Completed Delay",
-      "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS after which results of completed Storage Commitment requests are purged. If absent, there is no deletion.",
+      "description": "Delay in ISO-8601 duration format PnDTnHnMnS after which results of completed Storage Commitment requests are purged. If absent, there is no deletion.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmPurgeStgCmtPollingInterval": {
       "title": "Purge Storage Commitment Polling Interval",
-      "description": "Polling Interval for purging Storage Commitment Results in ISO-8601 duration format PnDTnHnMn.nS. If absent, there is no deletion",
+      "description": "Polling Interval for purging Storage Commitment Results in ISO-8601 duration format PnDTnHnMnS. If absent, there is no deletion",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -849,13 +877,13 @@
     },
     "dcmStorageVerificationInitialDelay": {
       "title": "Storage Verification Initial Delay",
-      "description": "Delay in ISO-8601 duration format PnYnMnD or PnW of first Storage Verification of a Series after it was received. May be overwritten by configured values for particular Archive Network AEs.",
+      "description": "Delay of first Storage Verification of a Series after it was received. May be overwritten by configured values for particular Archive Network AEs.",
       "type": "string",
       "format": "dcmPeriod"
     },
     "dcmStorageVerificationPeriod": {
       "title": "Storage Verification Period",
-      "description": "Period between successive Storage Verifications of one Series in ISO-8601 period format PnYnMnD or PnW",
+      "description": "Period between successive Storage Verifications of one Series.",
       "type": "string",
       "format": "dcmPeriod"
     },
@@ -868,7 +896,7 @@
     },
     "dcmStorageVerificationPollingInterval": {
       "title": "Storage Verification Polling Interval",
-      "description": "Polling Interval for Series scheduled for Storage Verification in ISO-8601 duration format PnDTnHnMn.nS.",
+      "description": "Polling Interval for Series scheduled for Storage Verification in ISO-8601 duration format PnDTnHnMnS.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -897,7 +925,7 @@
     },
     "dcmCompressionPollingInterval": {
       "title": "Compression Polling Interval",
-      "description": "Polling Interval for Series to be compressed in ISO-8601 duration format PnDTnHnMn.nS.",
+      "description": "Polling Interval for Series to be compressed in ISO-8601 duration format PnDTnHnMnS.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -928,7 +956,64 @@
     },
     "dcmDiffTaskProgressUpdateInterval": {
       "title": "Diff Task Progress Update Interval",
-      "description": "Interval of updating Diff Tasks in process for progress monitoring in ISO-8601 duration format PnDTnHnMn.nS; disabled if absent.",
+      "description": "Interval of updating Diff Tasks in process for progress monitoring; disabled if absent.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
+    "dcmPatientVerificationPDQServiceID": {
+      "title": "Patient Verification PDQ Service ID",
+      "description": "ID of PDQ Service used for Verification of Patient Demographic. If absent, no Patient Verification will be performed.",
+      "type": "string",
+      "format": "dcmPDQServiceID"
+    },
+    "dcmPatientVerificationPollingInterval": {
+      "title": "Patient Verification Polling Interval",
+      "description": "Patient Verification Polling Interval. If absent, no Patient Verification will be performed.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
+    "dcmPatientVerificationFetchSize": {
+      "title": "Patient Verification Fetch Size",
+      "description": "Maximal number of Patients fetched for Patient Verification in one query.",
+      "type": "integer",
+      "default" : 100,
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
+    "dcmPatientVerificationAdjustIssuerOfPatientID": {
+      "title": "Patient Verification Adjust Issuer of Patient ID",
+      "description": "Indicates if the Issuer Of Patient ID shall be adjusted to the value returned by the PDQ Service.",
+      "type": "boolean",
+      "default" : false
+    },
+    "dcmPatientVerificationPeriod": {
+      "title": "Patient Verification Period",
+      "description": "Period in which Patient Demographic will be verified. If absent, Patient Verification will not be renewed for Patients verified in the past.",
+      "type": "string",
+      "format": "dcmPeriod"
+    },
+    "dcmPatientVerificationPeriodOnNotFound": {
+      "title": "Patient Verification Period Not Found",
+      "description": "Period in which Patient Demographic will be retried for Patients which were not found by the configured PDQ Service on last attempt. If absent, Patient Verification will not be retried for Patients not found in the past.",
+      "type": "string",
+      "format": "dcmPeriod"
+    },
+    "dcmPatientVerificationRetryInterval": {
+      "title": "Patient Verification Retry Interval",
+      "description": "Patient Verification Retry Interval in which failed attempts to verify Patient Demographics against the PDQ Service configured by Patient Verification PDQ Service ID will be retried until the maximal number of retries specified by Patient Verification Max Retries is reached. If absent, failed Patient Verification attempts will not be retried.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
+    "dcmPatientVerificationMaxRetries": {
+      "title": "Patient Verification Maximum Number of Retries",
+      "description": "Maximum number of retries to verify Patient Demographics against the PDQ Service configured by dcmPatientVerificationPDQServiceID. Only effective if Patient Verification Retry Interval is specified. -1 = forever.",
+      "type": "integer",
+      "default": 0,
+      "minimum": -1
+    },
+    "dcmPatientVerificationMaxStaleness": {
+      "title": "Patient Verification Maximum Staleness",
+      "description": "Indicates to renew the verification of Patient Demographics on receive of objects for a patient, if previous verification is longer ago as the specified Interval. If absent, Patient Verification on receive of objects is disabled.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -960,7 +1045,7 @@
     },
     "hl7PSUDelay": {
       "title": "HL7 Procedure Status Update Delay",
-      "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS after which an HL7 Procedure Status Update for a received study is sent to configured HL7 receivers. If absent, HL7 Procedure Status Update is triggered by received MPPS. May be overwritten by configured values for particular Archive Network AEs.",
+      "description": "Delay in ISO-8601 duration format PnDTnHnMnS after which an HL7 Procedure Status Update for a received study is sent to configured HL7 receivers. If absent, HL7 Procedure Status Update is triggered by received MPPS. May be overwritten by configured values for particular Archive Network AEs.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -972,7 +1057,7 @@
     },
     "hl7PSUTimeout": {
       "title": "HL7 Procedure Status Update Timeout",
-      "description": "Timeout in ISO-8601 duration format PnDTnHnMn.nS for waiting on receive of instances referenced in MPPS; check for completeness forever if absent. May be overwritten by configured values for particular Archive Network AEs.",
+      "description": "Timeout in ISO-8601 duration format PnDTnHnMnS for waiting on receive of instances referenced in MPPS; check for completeness forever if absent. May be overwritten by configured values for particular Archive Network AEs.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -984,7 +1069,7 @@
     },
     "hl7PSUTaskPollingInterval": {
       "title": "HL7 Procedure Status Update Task Polling Interval",
-      "description": "Polling Interval for HL7 Procedure Status Update Tasks in ISO-8601 duration format PnDTnHnMn.nS. Disabled, if absent.",
+      "description": "Polling Interval for HL7 Procedure Status Update Tasks in ISO-8601 duration format PnDTnHnMnS. Disabled, if absent.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -1049,6 +1134,15 @@
       "description": "Specifies Storage System",
       "type": "array",
       "titleKey":"{dcmStorageID}",
+      "use": [
+        "dcmSeriesMetadataStorageID[*]",
+        "dcmStorageVerificationStorageID[*]",
+        "dcmStorage[*].dcmExportStorageID",
+        "dcmStorage[*].dcmRetrieveCacheStorageID",
+        "$.dicomNetworkAE[*].dcmNetworkAE.dcmArchiveNetworkAE.dcmObjectStorageID[*]",
+        "$.dicomNetworkAE[*].dcmNetworkAE.dcmArchiveNetworkAE.dcmMetadataStorageID[*]",
+        "$.dicomNetworkAE[*].dcmNetworkAE.dcmArchiveNetworkAE.dcmStorageVerificationStorageID[*]"
+      ],
       "items" : {
         "$ref": "storage.schema.json"
       }
@@ -1058,6 +1152,9 @@
       "description": "Specifies behavior on Rejection Note Stored",
       "type": "array",
       "titleKey":"{dcmQueryRetrieveViewID}",
+      "use": [
+        "$.dicomNetworkAE[*].dcmNetworkAE.dcmArchiveNetworkAE.dcmQueryRetrieveViewID"
+      ],
       "items" : {
         "$ref": "queryRetrieveView.schema.json"
       }
@@ -1067,8 +1164,24 @@
       "description": "Managed JMS Queue",
       "type": "array",
       "titleKey":"{dcmQueueName}",
+      "use": [
+        "$.dcmDevice.dcmuiConfig[*].dcmuiDashboardConfig[*].dcmuiQueueName[*]",
+        "$.dcmDevice.dcmuiConfig[*].dcmuiDashboardConfig[*].dcmuiCompareSideObjects[*].dcmuiCompareSideQueueName"
+      ],
       "items" : {
         "$ref": "queue.schema.json"
+      }
+    },
+    "dcmPDQService": {
+      "title": "PDQ Service Descriptor",
+      "description": "PDQ Service Descriptor",
+      "type": "array",
+      "titleKey":"{dcmPDQServiceID}",
+      "use": [
+        "dcmPatientVerificationPDQServiceID"
+      ],
+      "items" : {
+        "$ref": "pdqService.schema.json"
       }
     },
     "dcmExporter": {
@@ -1076,6 +1189,15 @@
       "description": "Exporter Descriptor",
       "type": "array",
       "titleKey":"{dcmExporterID}",
+      "use": [
+        "dcmExportPriorsRule[*].dcmExporterID[*]",
+        "dcmExportRule[*].dcmExporterID[*]",
+        "hl7ExportRule[*].dcmExporterID[*]",
+        "$.dicomNetworkAE[*].dcmNetworkAE.dcmArchiveNetworkAE.dcmExportPriorsRule[*].dcmExporterID[*]",
+        "$.dicomNetworkAE[*].dcmNetworkAE.dcmArchiveNetworkAE.dcmExportRule[*].dcmExporterID[*]",
+        "$.dcmDevice.hl7Application[*].dcmArchiveHL7Application.hl7ExportRule[*].dcmExporterID[*]",
+        "$.dcmDevice.dcmuiConfig[*].dcmuiDashboardConfig[*].dcmuiExportName[*]"
+      ],
       "items" : {
         "$ref": "exporter.schema.json"
       }
@@ -1089,13 +1211,13 @@
         "$ref": "exportRule.schema.json"
       }
     },
-    "dcmPrefetchRule": {
-      "title": "DICOM Prefetch Rule",
-      "description": "Prefetch Rules applied to DICOM objects received by any AE. May be supplemented by configured Prefetch Rules for particular Archive Network AEs.",
+    "dcmExportPriorsRule": {
+      "title": "Export Priors Rule",
+      "description": "Export Priors Rules applied to DICOM objects received by any AE. May be supplemented by configured Export Priors Rules for particular Archive Network AEs.",
       "type": "array",
       "titleKey":"{cn}",
       "items" : {
-        "$ref": "prefetchRule.schema.json"
+        "$ref": "exportPriorsRule.schema.json"
       }
     },
     "dcmRSForwardRule": {
@@ -1112,6 +1234,12 @@
       "description": "Keycloak Server",
       "type": "array",
       "titleKey":"{dcmKeycloakServerID}",
+      "use": [
+        "dcmRSForwardRule[*].dcmKeycloakServerID",
+        "$.dicomNetworkAE[*].dcmNetworkAE.dcmArchiveNetworkAE.dcmRSForwardRule[*].dcmKeycloakServerID",
+        "$.dcmDevice.dcmuiConfig[*].dcmuiDeviceClusterObject[*].dcmuiDeviceClusterKeycloakServer[*]",
+        "$.dcmDevice.dcmuiConfig[*].dcmuiElasticsearchConfig[*].dcmuiElasticsearchURLObjects[*].dcmuiElasticsearchURLKeycloakServer[*]"
+      ],
       "items" : {
         "$ref": "keycloakServer.schema.json"
       }
@@ -1139,6 +1267,9 @@
       "description": "Specifies behavior on Rejection Note Stored",
       "type": "array",
       "titleKey":"{dcmRejectionNoteLabel}",
+      "use": [
+        "dcmQueryRetrieveView[*].dcmShowInstancesRejectedByCode[*]"
+      ],
       "items" : {
         "$ref": "rejectionNote.schema.json"
       }
@@ -1179,9 +1310,18 @@
         "$ref": "hl7ForwardRule.schema.json"
       }
     },
+    "hl7ExportRule": {
+      "title": "HL7 Export Rule",
+      "description": "Export Rules applied to HL7 messages received by any HL7 Application. May be supplemented by configured HL7 Export Rules for particular HL7 Application.",
+      "type": "array",
+      "titleKey":"{cn}",
+      "items" : {
+        "$ref": "hl7ExportRule.schema.json"
+      }
+    },
     "hl7PrefetchRule": {
       "title": "HL7 Prefetch Rule",
-      "description": "Prefetch Rules applied to HL7 messages received by any HL7 Application. May be supplemented by configured Prefetch Rules for particular HL7 Application.",
+      "description": "HL7 Prefetch Rules applied to HL7 messages received by any HL7 Application. May be supplemented by configured HL7 Prefetch Rules for particular HL7 Application.",
       "type": "array",
       "titleKey":"{cn}",
       "items" : {

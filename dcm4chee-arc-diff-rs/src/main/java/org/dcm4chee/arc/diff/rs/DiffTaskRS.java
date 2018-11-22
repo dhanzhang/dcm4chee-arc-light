@@ -56,7 +56,6 @@ import org.dcm4chee.arc.event.BulkQueueMessageEvent;
 import org.dcm4chee.arc.event.QueueMessageEvent;
 import org.dcm4chee.arc.event.QueueMessageOperation;
 import org.dcm4chee.arc.qmgt.IllegalTaskStateException;
-import org.dcm4chee.arc.qmgt.QueueManager;
 import org.dcm4chee.arc.query.util.MatchTask;
 import org.dcm4chee.arc.rs.client.RSClient;
 import org.jboss.resteasy.annotations.cache.NoCache;
@@ -91,9 +90,6 @@ public class DiffTaskRS {
 
     @Inject
     private DiffService diffService;
-
-    @Inject
-    private QueueManager queueMgr;
 
     @Inject
     private Device device;
@@ -173,13 +169,17 @@ public class DiffTaskRS {
         if (output == null)
             return notAcceptable();
 
-        DiffTaskQuery diffTasks = diffService.listDiffTasks(
-                matchQueueMessage(status(), deviceName, null),
-                matchDiffTask(updatedTime),
-                MatchTask.diffTaskOrder(orderby),
-                parseInt(offset), parseInt(limit));
+        try {
+            DiffTaskQuery diffTasks = diffService.listDiffTasks(
+                    matchQueueMessage(status(), deviceName, null),
+                    matchDiffTask(updatedTime),
+                    MatchTask.diffTaskOrder(orderby),
+                    parseInt(offset), parseInt(limit));
 
-        return Response.ok(output.entity(diffTasks), output.type).build();
+            return Response.ok(output.entity(diffTasks), output.type).build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(e);
+        }
     }
 
     @GET
@@ -188,9 +188,13 @@ public class DiffTaskRS {
     @Produces("application/json")
     public Response countDiffTasks() {
         logRequest();
-        return count(diffService.countDiffTasks(
-                matchQueueMessage(status(), deviceName, null),
-                matchDiffTask(updatedTime)));
+        try {
+            return count(diffService.countDiffTasks(
+                    matchQueueMessage(status(), deviceName, null),
+                    matchDiffTask(updatedTime)));
+        } catch (Exception e) {
+            return errResponseAsTextPlain(e);
+        }
     }
 
     @GET
@@ -206,8 +210,13 @@ public class DiffTaskRS {
         if (diffTask.getMatches() == 0)
             return Response.noContent().build();
 
-        return Response.ok(entity(diffService.getDiffTaskAttributes(diffTask, parseInt(offset), parseInt(limit))))
-                .build();
+        try {
+            return Response.ok(
+                    entity(diffService.getDiffTaskAttributes(diffTask, parseInt(offset), parseInt(limit))))
+                    .build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(e);
+        }
     }
 
     @POST
@@ -220,6 +229,9 @@ public class DiffTaskRS {
         } catch (IllegalTaskStateException e) {
             queueEvent.setException(e);
             return rsp(Response.Status.CONFLICT, e.getMessage());
+        } catch (Exception e) {
+            queueEvent.setException(e);
+            return errResponseAsTextPlain(e);
         } finally {
             queueMsgEvent.fire(queueEvent);
         }
@@ -247,6 +259,9 @@ public class DiffTaskRS {
         } catch (IllegalTaskStateException e) {
             queueEvent.setException(e);
             return rsp(Response.Status.CONFLICT, e.getMessage());
+        } catch (Exception e) {
+            queueEvent.setException(e);
+            return errResponseAsTextPlain(e);
         } finally {
             bulkQueueMsgEvent.fire(queueEvent);
         }
@@ -339,28 +354,39 @@ public class DiffTaskRS {
     public Response deleteTask(@PathParam("taskPK") long pk) {
         logRequest();
         QueueMessageEvent queueEvent = new QueueMessageEvent(request, QueueMessageOperation.DeleteTasks);
-        boolean deleteDiffTask = diffService.deleteDiffTask(pk, queueEvent);
-        queueMsgEvent.fire(queueEvent);
-        return rsp(deleteDiffTask);
+        try {
+            return rsp(diffService.deleteDiffTask(pk, queueEvent));
+        } catch (Exception e) {
+            queueEvent.setException(e);
+            return errResponseAsTextPlain(e);
+        } finally {
+            queueMsgEvent.fire(queueEvent);
+        }
     }
 
     @DELETE
     public String deleteTasks() {
         logRequest();
         BulkQueueMessageEvent queueEvent = new BulkQueueMessageEvent(request, QueueMessageOperation.DeleteTasks);
-        int deleted = 0;
-        int count;
-        int deleteTasksFetchSize = queueTasksFetchSize();
-        do {
-            count = diffService.deleteTasks(
-                    matchQueueMessage(status(), deviceName, null),
-                    matchDiffTask(updatedTime),
-                    deleteTasksFetchSize);
-            deleted += count;
-        } while (count >= deleteTasksFetchSize);
-        queueEvent.setCount(deleted);
-        bulkQueueMsgEvent.fire(queueEvent);
-        return "{\"deleted\":" + deleted + '}';
+        try {
+            int deleted = 0;
+            int count;
+            int deleteTasksFetchSize = queueTasksFetchSize();
+            do {
+                count = diffService.deleteTasks(
+                        matchQueueMessage(status(), deviceName, null),
+                        matchDiffTask(updatedTime),
+                        deleteTasksFetchSize);
+                deleted += count;
+            } while (count >= deleteTasksFetchSize);
+            queueEvent.setCount(deleted);
+            return "{\"deleted\":" + deleted + '}';
+        } catch (Exception e) {
+            queueEvent.setException(e);
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        } finally {
+            bulkQueueMsgEvent.fire(queueEvent);
+        }
     }
 
     private Output selectMediaType(String accept) {
@@ -498,10 +524,16 @@ public class DiffTaskRS {
     }
 
     private Response errResponseAsTextPlain(Exception e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(exceptionAsString(e))
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
         StringWriter sw = new StringWriter();
         e.printStackTrace(new PrintWriter(sw));
-        String exceptionAsString = sw.toString();
-        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(exceptionAsString).type("text/plain").build();
+        return sw.toString();
     }
 
     private Predicate matchDiffTask(String updatedTime) {

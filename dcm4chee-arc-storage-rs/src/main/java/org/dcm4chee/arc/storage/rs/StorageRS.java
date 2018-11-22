@@ -61,13 +61,13 @@ import javax.json.Json;
 import javax.json.stream.JsonGenerator;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.Pattern;
-import javax.ws.rs.Path;
-import javax.ws.rs.GET;
-import javax.ws.rs.Produces;
-import javax.ws.rs.QueryParam;
+import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.*;
 
 /**
@@ -113,7 +113,8 @@ public class StorageRS {
     @Produces("application/json")
     public StreamingOutput search() {
         LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        return out -> {
+        try {
+            return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
                 for (StorageSystem ss : getStorageSystems()) {
@@ -126,6 +127,7 @@ public class StorageRS {
                     writer.writeNotNullOrDef("dcmInstanceAvailability", desc.getInstanceAvailability(), null);
                     writer.writeNotDef("dcmReadOnly", desc.isReadOnly(), false);
                     writer.writeNotDef("dcmNoDeletionConstraint", desc.isNoDeletionConstraint(), false);
+                    writer.writeNotDef("dcmDeleterThreads", desc.getDeleterThreads(), 1);
                     if (desc.getStorageThreshold() != null)
                         gen.write("storageThreshold", desc.getStorageThreshold().getMinUsableDiskSpace());
                     writeDeleterThresholds(writer, gen, desc.getDeleterThresholds());
@@ -139,15 +141,16 @@ public class StorageRS {
                     writer.writeNotEmpty("dicomAETitle", ss.aets);
                     writer.writeNotNullOrDef("dcmStorageClusterID", desc.getStorageClusterID(), null);
                     writer.writeNotEmpty("usages", ss.usages);
-                    if (ss.usableSpace > 0L)
-                        gen.write("usableSpace", ss.usableSpace);
-                    if (ss.usableSpace > 0L)
-                        gen.write("totalSpace", ss.totalSpace);
+                    gen.write("usableSpace", ss.usableSpace);
+                    gen.write("totalSpace", ss.totalSpace);
                     gen.writeEnd();
                 }
                 gen.writeEnd();
                 gen.flush();
-        };
+            };
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        }
     }
 
     private String[] descriptorProperties(Map<String, ?> props) {
@@ -234,5 +237,18 @@ public class StorageRS {
             Arrays.sort(this.usages);
             Arrays.sort(this.aets);
         }
+    }
+
+    private Response errResponseAsTextPlain(Exception e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(exceptionAsString(e))
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

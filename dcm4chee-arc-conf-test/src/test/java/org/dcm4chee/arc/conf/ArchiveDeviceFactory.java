@@ -184,6 +184,11 @@ class ArchiveDeviceFactory {
         newQueueDescriptor("Export3", "XDS-I Export Tasks"),
         newQueueDescriptor("Export4", "Calculate Query Attributes and Study size Export Tasks"),
         newQueueDescriptor("Export5", "Nearline Storage Export Tasks"),
+        newQueueDescriptor("Export6", "Export6"),
+        newQueueDescriptor("Export7", "Export7"),
+        newQueueDescriptor("Export8", "Export8"),
+        newQueueDescriptor("Export9", "Export9"),
+        newQueueDescriptor("Export10", "Export10"),
         newQueueDescriptor("HL7Send", "HL7 Forward Tasks"),
         newQueueDescriptor("RSClient", "RESTful Forward Tasks"),
         newQueueDescriptor("CMoveSCU", "Dicom Retrieve Tasks"),
@@ -197,7 +202,7 @@ class ArchiveDeviceFactory {
             newHL7OrderSPSStatus("COMPLETED", "XO_CM")
     };
 
-    static QueueDescriptor newQueueDescriptor(String name, String description) {
+    private static QueueDescriptor newQueueDescriptor(String name, String description) {
         QueueDescriptor desc = new QueueDescriptor(name);
         desc.setDescription(description);
         desc.setJndiName("jms/queue/" + name);
@@ -209,14 +214,14 @@ class ArchiveDeviceFactory {
         return desc;
     }
 
-    static HL7OrderSPSStatus newHL7OrderSPSStatus(String spsStatus, String... orderStatuses) {
+    private static HL7OrderSPSStatus newHL7OrderSPSStatus(String spsStatus, String... orderStatuses) {
         HL7OrderSPSStatus hl7OrderSPSStatus = new HL7OrderSPSStatus();
         hl7OrderSPSStatus.setSPSStatus(SPSStatus.valueOf(spsStatus));
         hl7OrderSPSStatus.setOrderControlStatusCodes(orderStatuses);
         return hl7OrderSPSStatus;
     }
 
-    static IDGenerator newIDGenerator(IDGenerator.Name name, String format) {
+    private static IDGenerator newIDGenerator(IDGenerator.Name name, String format) {
         IDGenerator gen = new IDGenerator();
         gen.setName(name);
         gen.setFormat(format);
@@ -664,7 +669,9 @@ class ArchiveDeviceFactory {
             UID.ImplantationPlanSRStorage,
             UID.AcquisitionContextSRStorage,
             UID.SimplifiedAdultEchoSRStorage,
-            UID.PatientRadiationDoseSRStorage
+            UID.PatientRadiationDoseSRStorage,
+            UID.PlannedImagingAgentAdministrationSRStorage,
+            UID.PerformedImagingAgentAdministrationSRStorage
     };
 
     static final String[] SR_TSUIDS = {
@@ -742,6 +749,8 @@ class ArchiveDeviceFactory {
             UID.RTTreatmentSummaryRecordStorage,
             UID.RTIonPlanStorage,
             UID.RTIonBeamsTreatmentRecordStorage,
+            UID.RTPhysicianIntentStorage,
+            UID.RTSegmentAnnotationStorage,
             UID.RTBeamsDeliveryInstructionStorage,
             UID.RTBrachyApplicationSetupDeliveryInstructionStorage,
             UID.PrivateAgfaArrivalTransaction,

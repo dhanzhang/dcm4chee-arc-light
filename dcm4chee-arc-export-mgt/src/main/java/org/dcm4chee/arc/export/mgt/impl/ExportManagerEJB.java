@@ -42,7 +42,6 @@ package org.dcm4chee.arc.export.mgt.impl;
 
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Expression;
-import com.querydsl.core.types.ExpressionUtils;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.Predicate;
 import com.querydsl.jpa.hibernate.HibernateDeleteClause;
@@ -305,7 +304,7 @@ public class ExportManagerEJB implements ExportManager {
                 exporter.getQueueName(),
                 createMessage(exportTask, httpServletRequestInfo),
                 exporter.getPriority(),
-                batchID);
+                batchID, 0L);
         exportTask.setQueueMessage(queueMessage);
         try {
             Attributes attrs = queryService.queryExportTaskInfo(
@@ -347,15 +346,29 @@ public class ExportManagerEJB implements ExportManager {
 
     @Override
     @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
-    public ExportTaskQuery listExportTasks(QueueMessage.Status status, Predicate matchQueueMessage, Predicate matchExportTask,
-                                           OrderSpecifier<Date> order, int offset, int limit) {
-        return new ExportTaskQueryImpl(status,
-                openStatelessSession(), queryFetchSize(), matchQueueMessage, matchExportTask, order, offset, limit);
+    public ExportTaskQuery listExportTasks(
+            QueueMessage.Status status, String batchID, Predicate matchExportTask, OrderSpecifier<Date> order,
+            int offset, int limit) {
+        return new ExportTaskQueryImpl(status, batchID, openStatelessSession(), queryFetchSize(), matchExportTask,
+                order, offset, limit);
     }
 
     @Override
-    public long countExportTasks(QueueMessage.Status status, Predicate matchQueueMessage, Predicate matchExportTask) {
-        return createQuery(status, matchQueueMessage, matchExportTask).fetchCount();
+    public long countExportTasks(QueueMessage.Status status, String batchID, Predicate matchExportTask) {
+        HibernateQuery<ExportTask> exportTaskQuery = exportTaskQuery(matchExportTask);
+        if (status == QueueMessage.Status.TO_SCHEDULE)
+            exportTaskQuery.where(QExportTask.exportTask.queueMessage.isNull());
+        if (status != null && status != QueueMessage.Status.TO_SCHEDULE)
+            exportTaskQuery.where(QExportTask.exportTask.queueMessage.status.eq(status));
+        if (batchID != null)
+            exportTaskQuery.where(QExportTask.exportTask.queueMessage.batchID.eq(batchID));
+        return exportTaskQuery.fetchCount();
+    }
+
+    private HibernateQuery<ExportTask> exportTaskQuery(Predicate matchExportTask) {
+        return new HibernateQuery<ExportTask>(em.unwrap(Session.class))
+                .from(QExportTask.exportTask)
+                .where(matchExportTask);
     }
 
     private HibernateQuery<QueueMessage> createQuery(Predicate matchQueueMessage) {
@@ -371,29 +384,18 @@ public class ExportManagerEJB implements ExportManager {
                 .where(matchExportTask, QExportTask.exportTask.queueMessage.in(createQuery(matchQueueMessage)));
     }
 
-    private HibernateQuery<ExportTask> createQuery(QueueMessage.Status status, Predicate matchQueueMessage, Predicate matchExportTask) {
-        return new HibernateQuery<ExportTask>(em.unwrap(Session.class))
-                .from(QExportTask.exportTask)
-                .leftJoin(QExportTask.exportTask.queueMessage, QQueueMessage.queueMessage)
-                .where(matchExportTask, queuePredicate(status, createQuery(matchQueueMessage)));
-    }
-
-    private Predicate queuePredicate(QueueMessage.Status status, HibernateQuery<QueueMessage> queueMsgQuery) {
-        return status == QueueMessage.Status.TO_SCHEDULE
-                    ? QExportTask.exportTask.queueMessage.isNull()
-                    : status == null
-                        ? ExpressionUtils.or(QExportTask.exportTask.queueMessage.isNull(), QExportTask.exportTask.queueMessage.in(queueMsgQuery))
-                        : QExportTask.exportTask.queueMessage.in(queueMsgQuery);
-    }
-
     @Override
     public boolean deleteExportTask(Long pk, QueueMessageEvent queueEvent) {
         ExportTask task = em.find(ExportTask.class, pk);
         if (task == null)
             return false;
 
-        queueEvent.setQueueMsg(task.getQueueMessage());
-        em.remove(task);
+        QueueMessage queueMsg = task.getQueueMessage();
+        if (queueMsg == null)
+            em.remove(task);
+        else
+            queueManager.deleteTask(queueMsg.getMessageID(), queueEvent);
+
         LOG.info("Delete {}", task);
         return true;
     }
@@ -451,24 +453,40 @@ public class ExportManagerEJB implements ExportManager {
     }
 
     @Override
-    public int deleteTasks(QueueMessage.Status status, Predicate matchQueueMessage, Predicate matchExportTask) {
-        HibernateQuery<ExportTask> exportTaskQuery = createQuery(status, matchQueueMessage, matchExportTask);
-        List<Long> refQueuePks = exportTaskQuery.select(QExportTask.exportTask.queueMessage.pk).fetch();
+    public int deleteTasks(QueueMessage.Status status, String batchID, Predicate matchExportTask) {
+        if (status == QueueMessage.Status.TO_SCHEDULE)
+            return deletedToScheduleTasks(matchExportTask);
 
-        int count = (int) new HibernateDeleteClause(em.unwrap(Session.class), QExportTask.exportTask)
-                .where(QExportTask.exportTask.pk.in(exportTaskQuery.select(QExportTask.exportTask.pk)))
+        HibernateQuery<ExportTask> exportTaskQuery = exportTaskQuery(matchExportTask);
+        if (status == null && batchID == null)
+            return deletedRefQueueMsgs(exportTaskQuery) + deletedToScheduleTasks(matchExportTask);
+
+        if (batchID != null)
+            exportTaskQuery.where(QExportTask.exportTask.queueMessage.batchID.eq(batchID));
+        if (status != null)
+            exportTaskQuery.where(QExportTask.exportTask.queueMessage.status.eq(status));
+
+        return deletedRefQueueMsgs(exportTaskQuery);
+    }
+
+    private int deletedRefQueueMsgs(HibernateQuery<ExportTask> exportTaskQuery) {
+        List<String> refQueueMsgIDs = exportTaskQuery.select(QExportTask.exportTask.queueMessage.messageID).fetch();
+        for (String queueMsgID : refQueueMsgIDs)
+            queueManager.deleteTask(queueMsgID, null);
+
+        return refQueueMsgIDs.size();
+    }
+
+    private int deletedToScheduleTasks(Predicate matchExportTask) {
+        return (int) new HibernateDeleteClause(em.unwrap(Session.class), QExportTask.exportTask)
+                .where(matchExportTask, QExportTask.exportTask.queueMessage.isNull())
                 .execute();
-
-        new HibernateDeleteClause(em.unwrap(Session.class), QQueueMessage.queueMessage)
-                .where(QQueueMessage.queueMessage.pk.in(refQueuePks)).execute();
-
-        return count;
     }
 
     @Override
-    public List<String> listDistinctDeviceNames(Predicate matchQueueMessage, Predicate matchExportTask) {
-        return createQuery(matchQueueMessage, matchExportTask)
-                .select(QQueueMessage.queueMessage.deviceName)
+    public List<String> listDistinctDeviceNames(Predicate matchExportTask) {
+        return exportTaskQuery(matchExportTask)
+                .select(QExportTask.exportTask.deviceName)
                 .distinct()
                 .fetch();
     }

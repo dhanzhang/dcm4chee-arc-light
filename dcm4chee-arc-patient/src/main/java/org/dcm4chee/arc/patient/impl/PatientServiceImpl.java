@@ -143,7 +143,7 @@ public class PatientServiceImpl implements PatientService {
     public Patient mergePatient(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException, CircularPatientMergeException {
         if (ctx.getPatientID().matches(ctx.getPreviousPatientID()))
-            throw new CircularPatientMergeException();
+            throw new CircularPatientMergeException("PriorPatientID same as target PatientID");
 
         try {
             return ejb.mergePatient(ctx);
@@ -159,12 +159,13 @@ public class PatientServiceImpl implements PatientService {
     @Override
     public Patient changePatientID(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException, PatientTrackingNotAllowedException {
-        if (device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).isHl7TrackChangedPatientID()) {
+        if (device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).isHL7TrackChangedPatientID()) {
             if (isEitherHavingNoIssuer(ctx))
                 throw new PatientTrackingNotAllowedException(
-                        "Either previous or new Patient ID has missing issuer and change patient id tracking is enabled. Disable change patient id tracking feature and retry update");
+                        "Either previous or new Patient ID has missing issuer and change patient id tracking is enabled. "
+                                + "Disable change patient id tracking feature and retry update");
             if (ctx.getPatientID().equals(ctx.getPreviousPatientID()))
-                throw new CircularPatientMergeException();
+                throw new CircularPatientMergeException("PriorPatientID same as target PatientID");
             createPatient(ctx);
             return mergePatient(ctx);
         }
@@ -202,5 +203,14 @@ public class PatientServiceImpl implements PatientService {
         boolean patientDeleted = ejb.deletePatientIfHasNoMergedWith(ctx.getPatient());
         if (patientDeleted)
             patientMgtEvent.fire(ctx);
+    }
+
+    @Override
+    public Patient updatePatientStatus(PatientMgtContext ctx) {
+        try {
+            return ejb.updatePatientStatus(ctx);
+        } finally {
+            patientMgtEvent.fire(ctx);
+        }
     }
 }

@@ -11,6 +11,7 @@ import {HttpErrorHandler} from "../../helpers/http-error-handler";
 import {J4careHttpService} from "../../helpers/j4care-http.service";
 import {j4care} from "../../helpers/j4care.service";
 import {LoadingBarService} from "@ngx-loading-bar/core";
+import {environment} from "../../../environments/environment";
 
 @Component({
   selector: 'app-storage-systems',
@@ -23,18 +24,20 @@ export class StorageSystemsComponent implements OnInit {
     exportTasks = [];
     filters = {
         offset: undefined,
-        uriScheme: '',
-        dicomAETitle: '',
-        usage: '',
-        usableSpaceBelow: undefined
+        uriScheme: undefined,
+        dicomAETitle: undefined,
+        usage: undefined,
+        usableSpaceBelow: undefined,
+        usableSpaceBelowMode:"GB"
     };
     isRole: any;
     dialogRef: MatDialogRef<any>;
     _ = _;
     aets;
-    usableSpaceBelow;
-    usableSpaceBelowMode = "GB";
-
+    // usableSpaceBelow;
+    // usableSpaceBelowMode = "GB";
+    Object = Object;
+    filterSchema = [];
     constructor(
         public $http:J4careHttpService,
         public cfpLoadingBar: LoadingBarService,
@@ -66,50 +69,6 @@ export class StorageSystemsComponent implements OnInit {
         // this.initExporters(1);
         // this.init();
         this.getAets();
-        let $this = this;
-        if (!this.mainservice.user){
-            // console.log("in if studies ajax");
-            this.mainservice.user = this.mainservice.getUserInfo().share();
-            this.mainservice.user
-                .subscribe(
-                    (response) => {
-                        $this.user.user  = response.user;
-                        $this.mainservice.user.user = response.user;
-                        $this.user.roles = response.roles;
-                        $this.mainservice.user.roles = response.roles;
-                        $this.isRole = (role) => {
-                            if (response.user === null && response.roles.length === 0){
-                                return true;
-                            }else{
-                                if (response.roles && response.roles.indexOf(role) > -1){
-                                    return true;
-                                }else{
-                                    return false;
-                                }
-                            }
-                        };
-                    },
-                    (response) => {
-                        // $this.user = $this.user || {};
-                        console.log('get user error');
-                        $this.user.user = 'user';
-                        $this.mainservice.user.user = 'user';
-                        $this.user.roles = ['user', 'admin'];
-                        $this.mainservice.user.roles = ['user', 'admin'];
-                        $this.isRole = (role) => {
-                            if (role === 'admin'){
-                                return false;
-                            }else{
-                                return true;
-                            }
-                        };
-                    }
-                );
-
-        }else{
-            this.user = this.mainservice.user;
-            this.isRole = this.mainservice.isRole;
-        }
     };
     filterKeyUp(e){
         let code = (e.keyCode ? e.keyCode : e.which);
@@ -126,38 +85,63 @@ export class StorageSystemsComponent implements OnInit {
         this.dialogRef.componentInstance.parameters = confirmparameters;
         return this.dialogRef.afterClosed();
     };
-    calculateUsableSpaceBelowFilter(){
-        console.log("sl",this.usableSpaceBelow);
-        console.log("sl",this.usableSpaceBelowMode);
-        console.log("sl",this.filters.usableSpaceBelow);
-        switch(this.usableSpaceBelowMode) {
-            case "TB":
-                this.filters.usableSpaceBelow = this.usableSpaceBelow * 1000000000000;
-                break;
-            case "GB":
-                this.filters.usableSpaceBelow = this.usableSpaceBelow * 1000000000;
-                break;
-            case "MB":
-                this.filters.usableSpaceBelow = this.usableSpaceBelow * 1000000;
-                break;
-            default:
-                this.filters.usableSpaceBelow = this.usableSpaceBelow;
+    calculateUsableSpaceBelowFilter(filters){
+        if(filters.usableSpaceBelow){
+            switch(filters.usableSpaceBelowMode) {
+                case "TB":
+                    filters.usableSpaceBelow = filters.usableSpaceBelow * 1000000000000;
+                    break;
+                case "GB":
+                    filters.usableSpaceBelow = filters.usableSpaceBelow * 1000000000;
+                    break;
+                case "MB":
+                    filters.usableSpaceBelow = filters.usableSpaceBelow * 1000000;
+                    break;
+            }
         }
-        console.log("sl",this.filters.usableSpaceBelow);
+        return filters;
     }
     search(offset) {
         let $this = this;
         $this.cfpLoadingBar.start();
-        this.calculateUsableSpaceBelowFilter();
-        this.service.search(this.filters, offset)
-            .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+        let filters = Object.assign({},this.filters);
+        filters = this.calculateUsableSpaceBelowFilter(filters);
+        delete filters.usableSpaceBelowMode;
+        this.service.search(filters, offset)
+            .map(res => j4care.redirectOnAuthResponse(res))
             .subscribe((res) => {
+/*                if(!environment.production){
+                    res = [{"dcmStorageID":"fs1","dcmURI":"file:///storage/fs1/","dcmDigestAlgorithm":"MD5","dcmInstanceAvailability":"ONLINE","dcmProperty":["pathFormat={now,date,yyyy/MM/dd}/{0020000D,hash}/{0020000E,hash}/{00080018,hash}","checkMountFile=NO_MOUNT"],"usableSpace":341985411072,"totalSpace":412715171840},{"dcmStorageID":"nfscache1","dcmURI":"file:///storage/archive1tln-cache","dcmDigestAlgorithm":"MD5","dcmInstanceAvailability":"ONLINE","deleterThreshold":[{"":1000000000000}],"dcmExportStorageID":"s3-data","dcmProperty":["pathFormat={now,date,yyyy/MM/dd}/{0020000D,hash}/{0020000E,hash}/{00080018,hash}","checkMountFile=NO_MOUNT"],"dicomAETitle":["ARCHIVE1TLN"],"dcmStorageClusterID":"nfscachetln","usages":["dcmObjectStorageID"],"usableSpace":2458130055168,"totalSpace":7612746563584},{"dcmStorageID":"nfscache2","dcmURI":"file:///storage/archive2tln-cache","dcmDigestAlgorithm":"MD5","dcmInstanceAvailability":"ONLINE","dcmReadOnly":true,"dcmProperty":["pathFormat={now,date,yyyy/MM/dd}/{0020000D,hash}/{0020000E,hash}/{00080018,hash}","checkMountFile=NO_MOUNT"],"dcmStorageClusterID":"nfscachetln","usableSpace":2458130055168,"totalSpace":7612746563584},{"dcmStorageID":"nfscache3","dcmURI":"file:///storage/archive3tln-cache","dcmDigestAlgorithm":"MD5","dcmInstanceAvailability":"ONLINE","dcmReadOnly":true,"dcmProperty":["pathFormat={now,date,yyyy/MM/dd}/{0020000D,hash}/{0020000E,hash}/{00080018,hash}","checkMountFile=NO_MOUNT"],"dcmStorageClusterID":"nfscachetln","usableSpace":2458130055168,"totalSpace":7612746563584},{"dcmStorageID":"nfscache4","dcmURI":"file:///storage/archive4tln-cache","dcmDigestAlgorithm":"MD5","dcmInstanceAvailability":"ONLINE","dcmReadOnly":true,"dcmProperty":["pathFormat={now,date,yyyy/MM/dd}/{0020000D,hash}/{0020000E,hash}/{00080018,hash}","checkMountFile=NO_MOUNT"],"dcmStorageClusterID":"nfscachetln","usableSpace":2458130055168,"totalSpace":7612746563584},{"dcmStorageID":"s3-data","dcmURI":"jclouds:s3:http://ecscls1tln.vna.pacs.ee:9020","dcmDigestAlgorithm":"MD5","dcmInstanceAvailability":"NEARLINE","dcmRetrieveCacheStorageID":"nfscache1","dcmRetrieveCacheMaxParallel":20,"dcmProperty":["container=archive","jclouds.s3.virtual-host-buckets=false","credential=tzJaK0XSBYRfZcGRCAbktjwnM8WYCisqbPeemJH8","identity=lives3.service","pathFormat={now,date,yyyy/MM/dd}/{0020000D,hash}/{0020000E,hash}/{00080018,hash}","jclouds.strip-expect-header=true","containerExists=true","jclouds.relax-hostname=true","jclouds.trust-all-certs=true"],"dicomAETitle":["ARCHIVE1TLN_S3"],"usages":["dcmObjectStorageID"],"usableSpace":-1,"totalSpace":-1},{"dcmStorageID":"s3-metadata","dcmURI":"jclouds:s3:http://ecscls1tln.vna.pacs.ee:9020","dcmInstanceAvailability":"ONLINE","dcmReadOnly":true,"dcmProperty":["container=metadata","jclouds.s3.virtual-host-buckets=false","credential=tzJaK0XSBYRfZcGRCAbktjwnM8WYCisqbPeemJH8","identity=lives3.service","pathFormat={now,date,yyyy/MM/dd}/{0020000D}/{0020000E}/{now,date,yyyyMMddHHmmss}.zip","jclouds.strip-expect-header=true","containerExists=true","jclouds.relax-hostname=true","jclouds.trust-all-certs=true"],"usages":["dcmSeriesMetadataStorageID"],"usableSpace":-1,"totalSpace":-1}];
+                }*/
                 if (res && res.length > 0){
                     $this.matches = res.map((properties, index) => {
 /*                        if(_.hasIn(properties,'dicomAETitle')){
                             properties.dicomAETitle = properties.dicomAETitle.join(' | ');
                         }*/
+                        if(
+                            properties.dcmNoDeletionConstraint ||
+                            (
+                                j4care.isSetInObject(properties, 'deleterThreshold') &&
+                                (
+                                    j4care.isSetInObject(properties, 'dcmExportStorageID') || j4care.isSetInObject(properties, 'dcmExternalRetrieveAET')
+                                )
+                            )
+                        ){
+                            properties.noDeleter = true;
+                        }
+                        if(_.hasIn(properties, 'deleterThreshold') && _.hasIn(properties, 'usableSpace')){
+                            let deleterThreshold;
+                            properties.deleterThreshold.map((deleter, i) => {
+                                deleterThreshold = _.values(deleter)[0];
+                            });
+                            if(deleterThreshold && (deleterThreshold > properties.usableSpace)){
+                                properties.warning = true;
+                            }
+                        }
                         if (_.hasIn(properties, 'deleterThreshold')){
+                            properties.deleterThresholdProcent = properties.deleterThreshold.map((deleter, i) => {
+                                return (Math.round(((parseInt(<string>_.values(deleter)[0]) * 100) / properties.totalSpace) *100)/100).toFixed(2);
+                            });
                             properties.deleterThreshold = properties.deleterThreshold.map((deleter, i) => {
                                 if (_.keys(deleter)[0] != ''){
                                     return _.keys(deleter)[0] + ':' + $this.convertBtoGBorMB(_.values(deleter)[0]);
@@ -165,6 +149,12 @@ export class StorageSystemsComponent implements OnInit {
                                     return $this.convertBtoGBorMB(_.values(deleter)[0]);
                                 }
                             });
+                        }
+                        if(_.hasIn(properties, 'usableSpace') && _.hasIn(properties, 'totalSpace')){
+                            properties.usedSpace = (Math.round((((properties.totalSpace-properties.usableSpace)*100)/properties.totalSpace) * 100)/100).toFixed(2);
+/*                            if(properties.usedSpace){
+                                properties.usedSpace += ' %';
+                            }*/
                         }
                         if (_.hasIn(properties, 'usableSpace')){
                             properties.usableSpace = $this.convertBtoGBorMB(properties.usableSpace);
@@ -341,14 +331,11 @@ export class StorageSystemsComponent implements OnInit {
         });
     }
     getAets(){
-
-        let $this = this;
-        this.$http.get(
-            '../aets'
-        ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+        this.$http.get('../aets')
+            .map(res => j4care.redirectOnAuthResponse(res))
             .subscribe((response) => {
-                $this.aets = j4care.extendAetObjectWithAlias(response);
-
+                this.aets = j4care.extendAetObjectWithAlias(response);
+                this.filterSchema = this.service.getFiltersSchema(this.aets);
             }, (err) => {
                 console.log('error getting aets', err);
             });

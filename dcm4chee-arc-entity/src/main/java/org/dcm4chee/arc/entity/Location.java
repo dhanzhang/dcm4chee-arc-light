@@ -67,6 +67,8 @@ import java.util.Date;
         @NamedQuery(name = Location.FIND_BY_STUDY_PK_AND_STORAGE_IDS,
                 query = "select l from Location l join fetch l.instance inst " +
                         "where inst.series.study.pk=?1 and l.storageID in ?2"),
+        @NamedQuery(name = Location.FIND_BY_SOP_IUID_AND_STORAGE_ID,
+                query = "select l from Location l where l.instance.sopInstanceUID=?1 and l.storageID=?2"),
         @NamedQuery(name = Location.INSTANCE_PKS_BY_STUDY_PK_AND_STORAGE_IDS,
                 query = "select l.instance.pk from Location l where l.instance.series.study.pk=?1 and l.storageID in ?2"),
         @NamedQuery(name = Location.STORAGE_IDS_BY_STUDY_PK_AND_OBJECT_TYPE,
@@ -89,9 +91,13 @@ import java.util.Date;
         @NamedQuery(name = Location.COUNT_BY_UIDMAP,
                 query = "select count(l) from Location l where l.uidMap=?1"),
         @NamedQuery(name = Location.SET_DIGEST,
-                query="update Location l set l.digest = ?2 where l.pk = ?1"),
+                query = "update Location l set l.digest = ?2 where l.pk = ?1"),
         @NamedQuery(name = Location.SET_STATUS,
-                query="update Location l set l.status = ?2 where l.pk = ?1")
+                query = "update Location l set l.status = ?2 where l.pk = ?1"),
+        @NamedQuery(name = Location.UPDATE_STATUS_FROM,
+                query = "update Location l set l.status = ?3 where l.pk = ?1 and l.status = ?2"),
+        @NamedQuery(name = Location.DELETE_BY_PK,
+                query = "delete from Location l where l.pk = ?1")
 })
 @NamedNativeQueries({
         @NamedNativeQuery(name = Location.SIZE_OF_SERIES,
@@ -107,6 +113,7 @@ public class Location {
     public static final String FIND_BY_STUDY_PK = "Location.FindByStudyPk";
     public static final String FIND_BY_SERIES_PK = "Location.FindBySeriesPk";
     public static final String FIND_BY_STUDY_PK_AND_STORAGE_IDS = "Location.FindByStudyPkAndStorageIDs";
+    public static final String FIND_BY_SOP_IUID_AND_STORAGE_ID = "Location.FindBySOPIUIDAndStorageID";
     public static final String INSTANCE_PKS_BY_STUDY_PK_AND_STORAGE_IDS = "Location.InstancePksByStudyPkAndStorageIDs";
     public static final String STORAGE_IDS_BY_STUDY_PK_AND_OBJECT_TYPE = "Location.StorageIDsByStudyPkAndObjectType";
     public static final String FIND_BY_REJECTION_CODE = "Location.FindByRejectionCode";
@@ -117,6 +124,8 @@ public class Location {
     public static final String COUNT_BY_UIDMAP = "Location.CountByUIDMap";
     public static final String SET_DIGEST = "Location.SetDigest";
     public static final String SET_STATUS = "Location.SetStatus";
+    public static final String UPDATE_STATUS_FROM = "Location.UpdateStatusFrom";
+    public static final String DELETE_BY_PK = "Location.DeleteByPk";
     public static final String SIZE_OF_SERIES = "Location.SizeOfSeries";
 
     public enum Status {
@@ -128,7 +137,8 @@ public class Location {
         FAILED_TO_FETCH_OBJECT,     // 5
         DIFFERING_OBJECT_SIZE,      // 6
         DIFFERING_OBJECT_CHECKSUM,  // 7
-        DIFFERING_S3_MD5SUM         // 8
+        DIFFERING_S3_MD5SUM,        // 8
+        FAILED_TO_DELETE2           // 9
     }
 
     public enum ObjectType { DICOM_FILE, METADATA }

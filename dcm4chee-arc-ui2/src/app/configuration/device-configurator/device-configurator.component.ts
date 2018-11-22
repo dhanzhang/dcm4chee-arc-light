@@ -11,9 +11,9 @@ import {WindowRefService} from "../../helpers/window-ref.service";
 import {HttpErrorHandler} from "../../helpers/http-error-handler";
 import {AeListService} from "../ae-list/ae-list.service";
 import {Hl7ApplicationsService} from "../hl7-applications/hl7-applications.service";
-import {DevicesService} from "../../devices/devices.service";
 import {J4careHttpService} from "../../helpers/j4care-http.service";
 import {LoadingBarService} from "@ngx-loading-bar/core";
+import {DevicesService} from "../devices/devices.service";
 
 @Component({
   selector: 'app-device-configurator',
@@ -189,12 +189,14 @@ export class DeviceConfiguratorComponent implements OnInit, OnDestroy {
                                         'text': 'Reload successful',
                                         'status': 'info'
                                     });
-                                    try{
-                                        let global = _.cloneDeep(this.mainservice.global);
-                                        global["uiConfig"] =  _.get($this.service.device, "dcmDevice.dcmuiConfig[0]");
-                                        this.mainservice.setGlobal(global);
-                                    }catch (e){
-                                        console.error("Ui Config could not be updated", e);
+                                    if(this.mainservice.deviceName === this.service.device.dicomDeviceName){
+                                        try{
+                                            let global = _.cloneDeep(this.mainservice.global);
+                                            global["uiConfig"] =  _.get($this.service.device, "dcmDevice.dcmuiConfig[0]");
+                                            this.mainservice.setGlobal(global);
+                                        }catch (e){
+                                            console.error("Ui Config could not be updated", e);
+                                        }
                                     }
                                     $this.cfpLoadingBar.complete();
                                 }, (err) => {

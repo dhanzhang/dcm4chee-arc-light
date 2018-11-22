@@ -285,9 +285,9 @@ export class StudiesComponent implements OnDestroy,OnInit{
         public mainservice: AppService,
         public cfpLoadingBar: LoadingBarService,
         private loadingBar:LoadingBarService,
-        public viewContainerRef: ViewContainerRef ,
-        public dialog: MatDialog,
-        public config: MatDialogConfig,
+        private viewContainerRef: ViewContainerRef ,
+        private dialog: MatDialog,
+        private config: MatDialogConfig,
         public httpErrorHandler:HttpErrorHandler,
         public j4care:j4care,
         public permissionService:PermissionService,
@@ -794,7 +794,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                         index++;
                     }
                     tags.splice(index, 0, '00201200');
-                    tags.push('77770010','77771010','77771011');
+                    tags.push('77770010','77771010','77771011','77771012','77771013','77771014');
                     console.log('res', res);
                     res.forEach(function (studyAttrs, index) {
                         patAttrs = {};
@@ -2238,31 +2238,56 @@ export class StudiesComponent implements OnDestroy,OnInit{
             "study"
         );
     }
+    downloadCSV(attr?, mode?){
+        let queryParameters = this.createQueryParams(0, 1000, this.createStudyFilterParams());
+        this.confirm({
+            content:"Do you want to use semicolon as delimiter?",
+            cancelButton:"No",
+            saveButton:"Yes",
+            result:"yes"
+        }).subscribe((ok)=>{
+            let semicolon = false;
+            if(ok)
+                semicolon = true;
+            let token;
+            let url = `${this.rsURL()}/studies`;
+            this.$http.refreshToken().subscribe((response)=>{
+                if(!this.mainservice.global.notSecure){
+                    if(response && response.length != 0){
+                        this.$http.resetAuthenticationInfo(response);
+                        token = response['token'];
+                    }else{
+                        token = this.mainservice.global.authentication.token;
+                    }
+                }
+                let filterClone = _.cloneDeep(queryParameters);
+                delete filterClone['offset'];
+                delete filterClone['limit'];
+                filterClone["accept"] = `text/csv${(semicolon?';delimiter=semicolon':'')}`;
+                if(attr && mode){
+                    filterClone["PatientID"] =  this.valueOf(attr['00100020']);
+                    filterClone["IssuerOfPatientID"] = this.valueOf(attr['00100021']);
+                    if(mode === "series" && _.hasIn(attr,'0020000D')){
+                        url =`${url}/${this.valueOf(attr['0020000D'])}/series`;
+                    }
+                    if(mode === "instance"){
+                        url =`${url}/${this.valueOf(attr['0020000D'])}/series/${this.valueOf(attr['0020000E'])}/instances`;
+                    }
+                }
+                if(!this.mainservice.global.notSecure){
+                    filterClone["access_token"] = token;
+                }
+                WindowRefService.nativeWindow.open(`${url}?${this.mainservice.param(filterClone)}`);
+            });
+        })
+    }
     storageVerification(){
         this.confirm({
             content: 'Schedule Storage Verification of matching Studies',
-            form_id:"storage_verification",
+            doNotSave:true,
             form_schema:[
                 [
                     [
-                        {
-                            tag:"label",
-                            text:"Marked as incomplete"
-                        },
-                        {
-                            tag:"checkbox",
-                            filterKey:"incomplete",
-                        }
-                    ],[
-                        {
-                            tag:"label",
-                            text:"Failed to be retrieved"
-                        },
-                        {
-                            tag:"checkbox",
-                            filterKey:"retrievefailed"
-                        }
-                    ],[
                         {
                             tag:"label",
                             text:"Failed storage verification"
@@ -2270,15 +2295,6 @@ export class StudiesComponent implements OnDestroy,OnInit{
                         {
                             tag:"checkbox",
                             filterKey:"storageVerificationFailed"
-                        }
-                    ],[
-                        {
-                            tag:"label",
-                            text:"Compression Failed"
-                        },
-                        {
-                            tag:"checkbox",
-                            filterKey:"compressionfailed"
                         }
                     ],[
                         {

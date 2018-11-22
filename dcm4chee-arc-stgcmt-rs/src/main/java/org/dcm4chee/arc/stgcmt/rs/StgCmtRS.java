@@ -57,7 +57,8 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.text.ParseException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -88,6 +89,12 @@ public class StgCmtRS {
     @QueryParam("exporterID")
     private String exporterID;
 
+    @QueryParam("batchID")
+    private String batchID;
+
+    @QueryParam("JMSMessageID")
+    private String msgID;
+
     @QueryParam("updatedBefore")
     @Pattern(regexp = "(19|20)\\d{2}\\-\\d{2}\\-\\d{2}")
     private String updatedBefore;
@@ -105,9 +112,10 @@ public class StgCmtRS {
     @Produces("application/json")
     public StreamingOutput listStgCmts() {
         logRequest();
-        final List<StgCmtResult> stgCmtResults = mgr.listStgCmts(
-                statusOf(status), studyUID, exporterID, parseInt(offset), parseInt(limit));
-        return out -> {
+        try {
+            final List<StgCmtResult> stgCmtResults = mgr.listStgCmts(
+                    statusOf(status), studyUID, exporterID, batchID, msgID, parseInt(offset), parseInt(limit));
+            return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
                 for (StgCmtResult stgCmtResult : stgCmtResults) {
@@ -120,6 +128,8 @@ public class StgCmtRS {
                     writer.writeNotNullOrDef("seriesUID", stgCmtResult.getSeriesInstanceUID(), null);
                     writer.writeNotNullOrDef("objectUID", stgCmtResult.getSopInstanceUID(), null);
                     writer.writeNotNullOrDef("exporterID", stgCmtResult.getExporterID(), null);
+                    writer.writeNotNullOrDef("JMSMessageID", stgCmtResult.getMessageID(), null);
+                    writer.writeNotNullOrDef("batchID", stgCmtResult.getBatchID(), null);
                     writer.writeNotNullOrDef("requested", stgCmtResult.getNumberOfInstances(), 0);
                     writer.writeNotNullOrDef("failures", stgCmtResult.getNumberOfFailures(), 0);
                     writer.writeNotNullOrDef("createdTime", stgCmtResult.getCreatedTime().toString(), null);
@@ -128,24 +138,35 @@ public class StgCmtRS {
                 }
                 gen.writeEnd();
                 gen.flush();
-        };
+            };
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        }
     }
 
     @DELETE
     @Path("{transactionUID}")
     public void deleteStgCmt(@PathParam("transactionUID") String transactionUID) {
         logRequest();
-        if (!mgr.deleteStgCmt(transactionUID))
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
+        try {
+            if (!mgr.deleteStgCmt(transactionUID))
+                throw new WebApplicationException(Response.Status.NOT_FOUND);
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        }
     }
 
     @DELETE
     @Produces("application/json")
     public String deleteStgCmts() {
         logRequest();
+        try {
         return "{\"deleted\":"
                 + mgr.deleteStgCmts(statusOf(status), parseDate(updatedBefore))
                 + '}';
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        }
     }
 
     private static StgCmtResult.Status statusOf(String status) {
@@ -156,18 +177,27 @@ public class StgCmtRS {
         return s != null ? Integer.parseInt(s) : 0;
     }
 
-    private static Date parseDate(String s) {
-        try {
-            return s != null
-                    ? new SimpleDateFormat("yyyy-MM-dd").parse(s)
-                    : null;
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
+    private static Date parseDate(String s) throws Exception {
+        return s != null
+                ? new SimpleDateFormat("yyyy-MM-dd").parse(s)
+                : null;
     }
 
     private void logRequest() {
         LOG.info("Process {} {} from {}@{}", request.getMethod(), request.getRequestURI(),
                 request.getRemoteUser(), request.getRemoteHost());
+    }
+
+    private Response errResponseAsTextPlain(Exception e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(exceptionAsString(e))
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

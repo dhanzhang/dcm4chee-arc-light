@@ -51,7 +51,6 @@ import org.dcm4chee.arc.event.BulkQueueMessageEvent;
 import org.dcm4chee.arc.event.QueueMessageEvent;
 import org.dcm4chee.arc.event.QueueMessageOperation;
 import org.dcm4chee.arc.qmgt.IllegalTaskStateException;
-import org.dcm4chee.arc.qmgt.QueueManager;
 import org.dcm4chee.arc.query.util.MatchTask;
 import org.dcm4chee.arc.retrieve.mgt.RetrieveManager;
 import org.dcm4chee.arc.retrieve.mgt.RetrieveTaskQuery;
@@ -87,9 +86,6 @@ public class RetrieveTaskRS {
 
     @Inject
     private RetrieveManager mgr;
-
-    @Inject
-    private QueueManager queueMgr;
 
     @Inject
     private Device device;
@@ -161,11 +157,15 @@ public class RetrieveTaskRS {
         if (output == null)
             return notAcceptable();
 
-        RetrieveTaskQuery tasks = mgr.listRetrieveTasks(
-                matchQueueMessage(status(), deviceName, null),
-                matchRetrieveTask(updatedTime),
-                MatchTask.retrieveTaskOrder(orderby), parseInt(offset), parseInt(limit));
-        return Response.ok(output.entity(tasks), output.type).build();
+        try {
+            RetrieveTaskQuery tasks = mgr.listRetrieveTasks(
+                    matchQueueMessage(status(), deviceName, null),
+                    matchRetrieveTask(updatedTime),
+                    MatchTask.retrieveTaskOrder(orderby), parseInt(offset), parseInt(limit));
+            return Response.ok(output.entity(tasks), output.type).build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(e);
+        }
     }
 
     @GET
@@ -174,9 +174,13 @@ public class RetrieveTaskRS {
     @Produces("application/json")
     public Response countRetrieveTasks() {
         logRequest();
-        return count( mgr.countRetrieveTasks(
+        try {
+            return count( mgr.countRetrieveTasks(
                 matchQueueMessage(status(), deviceName, null),
                 matchRetrieveTask(updatedTime)));
+        } catch (Exception e) {
+            return errResponseAsTextPlain(e);
+        }
     }
 
     @POST
@@ -189,6 +193,9 @@ public class RetrieveTaskRS {
         } catch (IllegalTaskStateException e) {
             queueEvent.setException(e);
             return rsp(Response.Status.CONFLICT, e.getMessage());
+        } catch (Exception e) {
+            queueEvent.setException(e);
+            return errResponseAsTextPlain(e);
         } finally {
             queueMsgEvent.fire(queueEvent);
         }
@@ -216,6 +223,9 @@ public class RetrieveTaskRS {
         } catch (IllegalTaskStateException e) {
             queueEvent.setException(e);
             return rsp(Response.Status.CONFLICT, e.getMessage());
+        } catch (Exception e) {
+            queueEvent.setException(e);
+            return errResponseAsTextPlain(e);
         } finally {
             bulkQueueMsgEvent.fire(queueEvent);
         }
@@ -307,28 +317,39 @@ public class RetrieveTaskRS {
     public Response deleteTask(@PathParam("taskPK") long pk) {
         logRequest();
         QueueMessageEvent queueEvent = new QueueMessageEvent(request, QueueMessageOperation.DeleteTasks);
-        boolean deleteRetrieveTask = mgr.deleteRetrieveTask(pk, queueEvent);
-        queueMsgEvent.fire(queueEvent);
-        return rsp(deleteRetrieveTask);
+        try {
+            return rsp(mgr.deleteRetrieveTask(pk, queueEvent));
+        } catch (Exception e) {
+            queueEvent.setException(e);
+            return errResponseAsTextPlain(e);
+        } finally {
+            queueMsgEvent.fire(queueEvent);
+        }
     }
 
     @DELETE
     public String deleteTasks() {
         logRequest();
         BulkQueueMessageEvent queueEvent = new BulkQueueMessageEvent(request, QueueMessageOperation.DeleteTasks);
-        int deleted = 0;
-        int count;
-        int deleteTasksFetchSize = queueTasksFetchSize();
-        do {
-            count = mgr.deleteTasks(
-                    matchQueueMessage(status(), deviceName, null),
-                    matchRetrieveTask(updatedTime),
-                    deleteTasksFetchSize);
-            deleted += count;
-        } while (count >= deleteTasksFetchSize);
-        queueEvent.setCount(deleted);
-        bulkQueueMsgEvent.fire(queueEvent);
-        return "{\"deleted\":" + deleted + '}';
+        try {
+            int deleted = 0;
+            int count;
+            int deleteTasksFetchSize = queueTasksFetchSize();
+            do {
+                count = mgr.deleteTasks(
+                        matchQueueMessage(status(), deviceName, null),
+                        matchRetrieveTask(updatedTime),
+                        deleteTasksFetchSize);
+                deleted += count;
+            } while (count >= deleteTasksFetchSize);
+            queueEvent.setCount(deleted);
+            return "{\"deleted\":" + deleted + '}';
+        } catch (Exception e) {
+            queueEvent.setException(e);
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        } finally {
+            bulkQueueMsgEvent.fire(queueEvent);
+        }
     }
 
     private static Response rsp(Response.Status status, Object entity) {
@@ -463,10 +484,16 @@ public class RetrieveTaskRS {
     }
 
     private Response errResponseAsTextPlain(Exception e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(exceptionAsString(e))
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
         StringWriter sw = new StringWriter();
         e.printStackTrace(new PrintWriter(sw));
-        String exceptionAsString = sw.toString();
-        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(exceptionAsString).type("text/plain").build();
+        return sw.toString();
     }
 
     private int queueTasksFetchSize() {

@@ -47,6 +47,7 @@ import org.dcm4che3.net.Device;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.ExporterDescriptor;
+import org.dcm4chee.arc.entity.Patient;
 import org.dcm4chee.arc.export.mgt.ExportManager;
 import org.dcm4chee.arc.exporter.ExportContext;
 import org.dcm4chee.arc.exporter.Exporter;
@@ -71,6 +72,8 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -149,6 +152,10 @@ public class ExportMatchingRS {
 
     @QueryParam("ExternalRetrieveAET!")
     private String externalRetrieveAETNot;
+
+    @QueryParam("patientVerificationStatus")
+    @Pattern(regexp = "UNVERIFIED|VERIFIED|NOT_FOUND|VERIFICATION_FAILED")
+    private String patientVerificationStatus;
 
     @QueryParam("batchID")
     private String batchID;
@@ -237,61 +244,65 @@ public class ExportMatchingRS {
         if (ae == null || !ae.isInstalled())
             return errResponse(Response.Status.NOT_FOUND, "No such Application Entity: " + aet);
 
-        ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        ExporterDescriptor exporter = arcDev.getExporterDescriptor(exporterID);
-        if (exporter == null)
-            return errResponse(Response.Status.NOT_FOUND, "No such Exporter: " + exporterID);
+        try {
+            ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+            ExporterDescriptor exporter = arcDev.getExporterDescriptor(exporterID);
+            if (exporter == null)
+                return errResponse(Response.Status.NOT_FOUND, "No such Exporter: " + exporterID);
 
-        boolean bOnlyIAN = Boolean.parseBoolean(onlyIAN);
-        if (bOnlyIAN && exporter.getIanDestinations().length == 0)
-            return errResponse(Response.Status.NOT_FOUND,
-                    "No IAN Destinations configured in Exporter: " + exporterID);
+            boolean bOnlyIAN = Boolean.parseBoolean(onlyIAN);
+            if (bOnlyIAN && exporter.getIanDestinations().length == 0)
+                return errResponse(Response.Status.NOT_FOUND,
+                        "No IAN Destinations configured in Exporter: " + exporterID);
 
-        boolean bOnlyStgCmt = Boolean.parseBoolean(onlyStgCmt);
-        if (bOnlyStgCmt && exporter.getStgCmtSCPAETitle() == null)
-            return errResponse(Response.Status.NOT_FOUND,
-                    "No Storage Commitment SCP configured in Exporter: " + exporterID);
+            boolean bOnlyStgCmt = Boolean.parseBoolean(onlyStgCmt);
+            if (bOnlyStgCmt && exporter.getStgCmtSCPAETitle() == null)
+                return errResponse(Response.Status.NOT_FOUND,
+                        "No Storage Commitment SCP configured in Exporter: " + exporterID);
 
-        QueryContext ctx = queryContext(method, qrlevel, studyInstanceUID, seriesInstanceUID, ae);
-        String warning = null;
-        int count = 0;
-        Response.Status status = Response.Status.ACCEPTED;
-        try (Query query = queryService.createQuery(ctx)) {
-            query.initQuery();
-            Transaction transaction = query.beginTransaction();
-            try {
-                query.setFetchSize(arcDev.getQueryFetchSize());
-                query.executeQuery();
-                while (query.hasMoreMatches()) {
-                    Attributes match = query.nextMatch();
-                    if (bOnlyIAN || bOnlyStgCmt) {
-                        ExportContext exportContext = createExportContext(match, qrlevel, exporter, aet);
-                        if (bOnlyIAN)
-                            ianScheduler.scheduleIAN(exportContext, exporter);
-                        if (bOnlyStgCmt)
-                            stgCmtSCU.scheduleStorageCommit(exportContext, exporter);
-                    } else
-                        scheduleExportTask(exporter, match, qrlevel);
-                    count++;
-                }
-            } catch (QueueSizeLimitExceededException e) {
-                status = Response.Status.SERVICE_UNAVAILABLE;
-                warning = e.getMessage();
-            } catch (Exception e) {
-                warning = e.getMessage();
-                status = Response.Status.INTERNAL_SERVER_ERROR;
-            } finally {
+            QueryContext ctx = queryContext(method, qrlevel, studyInstanceUID, seriesInstanceUID, ae);
+            String warning = null;
+            int count = 0;
+            Response.Status status = Response.Status.ACCEPTED;
+            try (Query query = queryService.createQuery(ctx)) {
+                query.initQuery();
+                Transaction transaction = query.beginTransaction();
                 try {
-                    transaction.commit();
+                    query.setFetchSize(arcDev.getQueryFetchSize());
+                    query.executeQuery();
+                    while (query.hasMoreMatches()) {
+                        Attributes match = query.nextMatch();
+                        if (bOnlyIAN || bOnlyStgCmt) {
+                            ExportContext exportContext = createExportContext(match, qrlevel, exporter);
+                            if (bOnlyIAN)
+                                ianScheduler.scheduleIAN(exportContext, exporter);
+                            if (bOnlyStgCmt)
+                                stgCmtSCU.scheduleStorageCommit(exportContext, exporter);
+                        } else
+                            scheduleExportTask(exporter, match, qrlevel);
+                        count++;
+                    }
+                } catch (QueueSizeLimitExceededException e) {
+                    status = Response.Status.SERVICE_UNAVAILABLE;
+                    warning = e.getMessage();
                 } catch (Exception e) {
-                    LOG.warn("Failed to commit transaction:\n{}", e);
+                    warning = e.getMessage();
+                    status = Response.Status.INTERNAL_SERVER_ERROR;
+                } finally {
+                    try {
+                        transaction.commit();
+                    } catch (Exception e) {
+                        LOG.warn("Failed to commit transaction:\n{}", e);
+                    }
                 }
             }
+            Response.ResponseBuilder builder = Response.status(status);
+            if (warning != null)
+                builder.header("Warning", warning);
+            return builder.entity("{\"count\":" + count + '}').build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(e);
         }
-        Response.ResponseBuilder builder = Response.status(status);
-        if (warning != null)
-            builder.header("Warning", warning);
-        return builder.entity("{\"count\":" + count + '}').build();
     }
 
     private static Response errResponse(Response.Status status, String message) {
@@ -338,11 +349,13 @@ public class ExportMatchingRS {
         queryParam.setCompressionFailed(Boolean.parseBoolean(compressionfailed));
         queryParam.setExternalRetrieveAET(externalRetrieveAET);
         queryParam.setExternalRetrieveAETNot(externalRetrieveAETNot);
+        if (patientVerificationStatus != null)
+            queryParam.setPatientVerificationStatus(Patient.VerificationStatus.valueOf(patientVerificationStatus));
         return queryParam;
     }
 
     private ExportContext createExportContext(
-            Attributes match, QueryRetrieveLevel2 qrlevel, ExporterDescriptor exporter, String aeTitle) {
+            Attributes match, QueryRetrieveLevel2 qrlevel, ExporterDescriptor exporter) {
         Exporter e = exporterFactory.getExporter(exporter);
         ExportContext ctx = e.createExportContext();
         ctx.setStudyInstanceUID(match.getString(Tag.StudyInstanceUID));
@@ -352,7 +365,8 @@ public class ExportMatchingRS {
             case SERIES:
                 ctx.setSeriesInstanceUID(match.getString(Tag.SeriesInstanceUID));
         }
-        ctx.setAETitle(aeTitle);
+        ctx.setAETitle(aet);
+        ctx.setBatchID(batchID);
         return ctx;
     }
 
@@ -365,6 +379,19 @@ public class ExportMatchingRS {
                 exporter,
                 HttpServletRequestInfo.valueOf(request),
                 batchID);
+    }
+
+    private Response errResponseAsTextPlain(Exception e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(exceptionAsString(e))
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 
 }

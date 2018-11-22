@@ -13,6 +13,7 @@ import {J4careHttpService} from "../../helpers/j4care-http.service";
 import {errorHandler} from "@angular/platform-browser/src/browser";
 import {LoadingBarService} from "@ngx-loading-bar/core";
 import {ActivatedRoute} from "@angular/router";
+import {j4care} from "../../helpers/j4care.service";
 
 @Component({
   selector: 'app-queues',
@@ -20,23 +21,12 @@ import {ActivatedRoute} from "@angular/router";
 })
 export class QueuesComponent implements OnInit, OnDestroy{
     matches = [];
-    limit = 20;
     queues = [];
-    queueName = null;
-    dicomDeviceName = null;
-    status = '*';
-    orderby;
-    // before;
-    createdTime;
-    updatedTime;
-    isRole: any = (user)=>{return false;};
-    user: User;
     dialogRef: MatDialogRef<any>;
     _ = _;
     devices;
-    count;
+    counText = `COUNT`;
     allAction;
-    batchID;
     allActionsOptions = [
         {
             value:"cancel",
@@ -69,6 +59,17 @@ export class QueuesComponent implements OnInit, OnDestroy{
         startText:"Start Auto Refresh",
         stopText:"Stop Auto Refresh"
     };
+    filterObject = {
+        status:undefined,
+        orderby:undefined,
+        queueName:undefined,
+        dicomDeviceName:undefined,
+        createdTime:undefined,
+        updatedTime:undefined,
+        batchID:undefined,
+        limit:20
+    };
+    filterSchema = [];
     constructor(
         public $http:J4careHttpService,
         public service: QueuesService,
@@ -78,7 +79,8 @@ export class QueuesComponent implements OnInit, OnDestroy{
         public dialog: MatDialog,
         public config: MatDialogConfig,
         private httpErrorHandler:HttpErrorHandler,
-        private route: ActivatedRoute
+        private route: ActivatedRoute,
+        private j4care:j4care
     ) {};
     ngOnInit(){
         this.initCheck(10);
@@ -89,7 +91,9 @@ export class QueuesComponent implements OnInit, OnDestroy{
             this.route.queryParams.subscribe(params => {
                 this.urlParam = Object.assign({},params);
                 if(this.urlParam["queueName"])
-                    this.queueName = this.urlParam["queueName"];
+                    this.filterObject.queueName = this.urlParam["queueName"];
+                if(this.urlParam["dicomDeviceName"])
+                    this.filterObject.dicomDeviceName = this.urlParam["dicomDeviceName"];
                 this.init();
             });
         }else{
@@ -98,6 +102,12 @@ export class QueuesComponent implements OnInit, OnDestroy{
                     $this.initCheck(retries-1);
                 },20);
             }else{
+                this.route.queryParams.subscribe(params => {
+                    this.urlParam = Object.assign({},params);
+                    if(this.urlParam["queueName"])
+                        this.filterObject.queueName = this.urlParam["queueName"];
+                    this.init();
+                });
                 this.init();
             }
         }
@@ -105,10 +115,10 @@ export class QueuesComponent implements OnInit, OnDestroy{
     }
     statusChange(){
         this.allActionsActive = this.allActionsOptions.filter((o)=>{
-            if(this.status == "SCHEDULED" || this.status == "IN PROCESS"){
+            if(this.filterObject.status == "SCHEDULED" || this.filterObject.status == "IN PROCESS"){
                 return o.value != 'reschedule';
             }else{
-                if(this.status === '*')
+                if(this.filterObject.status === '*')
                     return o.value != 'cancel' && o.value != 'reschedule';
                 else
                     return o.value != 'cancel';
@@ -118,10 +128,10 @@ export class QueuesComponent implements OnInit, OnDestroy{
     allActionChanged(e){
         let text = `Are you sure, you want to ${this.allAction} all matching tasks?`;
         let filter = {
-            dicomDeviceName:(this.dicomDeviceName && this.status != '*') ? this.dicomDeviceName : undefined,
-            status:(this.status && this.status != '*') ? this.status : undefined,
-            createdTime:this.createdTime || undefined,
-            updatedTime:this.updatedTime || undefined
+            dicomDeviceName:(this.filterObject.dicomDeviceName && this.filterObject.status != '*') ? this.filterObject.dicomDeviceName : undefined,
+            status:(this.filterObject.status && this.filterObject.status != '*') ? this.filterObject.status : undefined,
+            createdTime:this.filterObject.createdTime || undefined,
+            updatedTime:this.filterObject.updatedTime || undefined
         };
         switch (this.allAction){
             case "cancel":
@@ -130,7 +140,7 @@ export class QueuesComponent implements OnInit, OnDestroy{
                 }).subscribe((ok)=>{
                     if(ok){
                         this.cfpLoadingBar.start();
-                        this.service.cancelAll(filter,this.queueName).subscribe((res)=>{
+                        this.service.cancelAll(filter,this.filterObject.queueName).subscribe((res)=>{
                             this.mainservice.setMessage({
                                 'title': 'Info',
                                 'text': res.count + ' tasks deleted successfully!',
@@ -151,18 +161,31 @@ export class QueuesComponent implements OnInit, OnDestroy{
                     content: text
                 }).subscribe((ok)=>{
                     if(ok){
-                        this.cfpLoadingBar.start();
-                        this.service.rescheduleAll(filter,this.queueName).subscribe((res)=>{
-                            this.mainservice.setMessage({
-                                'title': 'Info',
-                                'text': res.count + ' tasks rescheduled successfully!',
-                                'status': 'info'
-                            });
-                            this.cfpLoadingBar.complete();
-                        }, (err) => {
-                            this.cfpLoadingBar.complete();
-                            this.httpErrorHandler.handleError(err);
-                        });
+                        this.j4care.selectDevice((res)=>{
+                            if(res){
+                                this.cfpLoadingBar.start();
+                                if(_.hasIn(res, "schema_model.newDeviceName") && res.schema_model.newDeviceName != ""){
+                                    filter["newDeviceName"] = res.schema_model.newDeviceName;
+                                }
+                                this.service.rescheduleAll(filter,this.filterObject.queueName).subscribe((res)=>{
+                                    this.mainservice.setMessage({
+                                        'title': 'Info',
+                                        'text': res.count + ' tasks rescheduled successfully!',
+                                        'status': 'info'
+                                    });
+                                    this.cfpLoadingBar.complete();
+                                }, (err) => {
+                                    this.cfpLoadingBar.complete();
+                                    this.httpErrorHandler.handleError(err);
+                                });
+                            }
+                        },
+                        this.devices.map(device=>{
+                            return {
+                                text:device.dicomDeviceName,
+                                value:device.dicomDeviceName
+                            }
+                        }));
                     }
                     this.allAction = "";
                     this.allAction = undefined;
@@ -174,7 +197,7 @@ export class QueuesComponent implements OnInit, OnDestroy{
                 }).subscribe((ok)=>{
                     if(ok){
                         this.cfpLoadingBar.start();
-                        this.service.deleteAll(filter,this.queueName).subscribe((res)=>{
+                        this.service.deleteAll(filter,this.filterObject.queueName).subscribe((res)=>{
                             this.mainservice.setMessage({
                                 'title': 'Info',
                                 'text': res.deleted + ' queues deleted successfully!',
@@ -192,17 +215,29 @@ export class QueuesComponent implements OnInit, OnDestroy{
             break;
         }
     }
+    test(){
+        this.j4care.selectDevice((res)=>{
+            console.log("j4carehelper select deviceres",res);
+            if(res){
+
+            }
+        },
+        this.devices.map(device=>{
+            return {
+                text:device.dicomDeviceName,
+                value:device.dicomDeviceName
+            }
+        }));
+    }
     init(){
         this.initQuery();
-        // this.before = new Date();
-        let $this = this;
         this.statuses.forEach(status =>{
             this.statusValues[status] = {
                 count: 0,
                 loader: false
             };
         });
-        if (!this.mainservice.user){
+/*        if (!this.mainservice.user){
             // console.log("in if studies ajax");
             this.mainservice.user = this.mainservice.getUserInfo().share();
             this.mainservice.user
@@ -247,7 +282,7 @@ export class QueuesComponent implements OnInit, OnDestroy{
         }else{
             this.user = this.mainservice.user;
             this.isRole = this.mainservice.isRole;
-        }
+        }*/
     }
     toggleAutoRefresh(){
         this.timer.started = !this.timer.started;
@@ -266,22 +301,30 @@ export class QueuesComponent implements OnInit, OnDestroy{
         this.tableHovered = false;
     }
     getCounts(){
-        if(!this.tableHovered)
-            this.search(0);
-        Object.keys(this.statusValues).forEach(status=>{
-            this.statusValues[status].loader = true;
-            this.service.getCount(this.queueName, status, undefined, undefined, this.dicomDeviceName, this.createdTime,this.updatedTime, this.batchID, '').subscribe((count)=>{
-                this.statusValues[status].loader = false;
-                try{
-                    this.statusValues[status].count = count.count;
-                }catch (e){
-                    this.statusValues[status].count = "";
-                }
-            },(err)=>{
-                this.statusValues[status].loader = false;
-                this.statusValues[status].count = "!";
+        if(this.filterObject.queueName){
+            if(!this.tableHovered)
+                this.search(0);
+            Object.keys(this.statusValues).forEach(status=>{
+                this.statusValues[status].loader = true;
+                this.service.getCount(this.filterObject.queueName, status, undefined, undefined, this.filterObject.dicomDeviceName, this.filterObject.createdTime,this.filterObject.updatedTime, this.filterObject.batchID, '').subscribe((count)=>{
+                    this.statusValues[status].loader = false;
+                    try{
+                        this.statusValues[status].count = count.count;
+                    }catch (e){
+                        this.statusValues[status].count = "";
+                    }
+                },(err)=>{
+                    this.statusValues[status].loader = false;
+                    this.statusValues[status].count = "!";
+                });
             });
-        });
+        }else{
+            this.mainservice.setMessage({
+                'title': 'Error',
+                'text': 'No Queue Name selected!',
+                'status': 'error'
+            });
+        }
     }
     filterKeyUp(e){
         let code = (e.keyCode ? e.keyCode : e.which);
@@ -289,47 +332,74 @@ export class QueuesComponent implements OnInit, OnDestroy{
             this.search(0);
         }
     };
+    onSubmit(object){
+        if(_.hasIn(object,"id") && _.hasIn(object,"model")){
+            this.filterObject = object.model;
+            if(object.id === "count"){
+                this.getCount();
+            }else{
+                this.search(0);
+            }
+        }
+    }
     search(offset) {
         let $this = this;
-        $this.cfpLoadingBar.start();
-        this.service.search(this.queueName, this.status, offset, this.limit, this.dicomDeviceName, this.createdTime,this.updatedTime, this.batchID, this.orderby)
-            .subscribe((res) => {
-                if (res && res.length > 0){
-                    $this.matches = res.map((properties, index) => {
+        if(this.filterObject.queueName){
+            $this.cfpLoadingBar.start();
+            this.service.search(this.filterObject.queueName, this.filterObject.status, offset, this.filterObject.limit, this.filterObject.dicomDeviceName, this.filterObject.createdTime,this.filterObject.updatedTime, this.filterObject.batchID, this.filterObject.orderby)
+                .subscribe((res) => {
+                    if (res && res.length > 0){
+                        $this.matches = res.map((properties, index) => {
+                            $this.cfpLoadingBar.complete();
+                            return {
+                                offset: offset + index,
+                                properties: properties,
+                                showProperties: false
+                            };
+                        });
+                    }else{
+                        $this.matches = [];
                         $this.cfpLoadingBar.complete();
-                        return {
-                            offset: offset + index,
-                            properties: properties,
-                            showProperties: false
-                        };
-                    });
-                }else{
+                        $this.mainservice.setMessage({
+                            'title': 'Info',
+                            'text': 'No tasks found!',
+                            'status': 'info'
+                        });
+                    }
+                }, (err) => {
+                    console.log('err', err);
                     $this.matches = [];
-                    $this.cfpLoadingBar.complete();
-                    $this.mainservice.setMessage({
-                        'title': 'Info',
-                        'text': 'No tasks found!',
-                        'status': 'info'
-                    });
-                }
-            }, (err) => {
-                console.log('err', err);
-                $this.matches = [];
+                });
+        }else{
+            $this.mainservice.setMessage({
+                'title': 'Error',
+                'text': 'No Queue Name selected!',
+                'status': 'error'
             });
+        }
     }
     getCount(){
-        this.cfpLoadingBar.start();
-        this.service.getCount(this.queueName, this.status, undefined, undefined, this.dicomDeviceName, this.createdTime,this.updatedTime, this.batchID, '').subscribe((count)=>{
-            try{
-                this.count = count.count;
-            }catch (e){
-                this.count = "";
-            }
-            this.cfpLoadingBar.complete();
-        },(err)=>{
-            this.cfpLoadingBar.complete();
-            this.httpErrorHandler.handleError(err);
-        });
+        if(this.filterObject.queueName){
+            this.cfpLoadingBar.start();
+            this.service.getCount(this.filterObject.queueName, this.filterObject.status, undefined, undefined, this.filterObject.dicomDeviceName, this.filterObject.createdTime,this.filterObject.updatedTime, this.filterObject.batchID, '').subscribe((count)=>{
+                try{
+                    this.counText = `COUNT ${count.count}`;
+                }catch (e){
+                    this.counText = `COUNT`;
+                }
+                this.setFilters();
+                this.cfpLoadingBar.complete();
+            },(err)=>{
+                this.cfpLoadingBar.complete();
+                this.httpErrorHandler.handleError(err);
+            });
+        }else{
+            this.mainservice.setMessage({
+                'title': 'Error',
+                'text': 'No Queue Name selected!',
+                'status': 'error'
+            });
+        }
     }
     scrollToDialog(){
         let counter = 0;
@@ -360,7 +430,7 @@ export class QueuesComponent implements OnInit, OnDestroy{
     cancel(match) {
         let $this = this;
         $this.cfpLoadingBar.start();
-        this.service.cancel(this.queueName, match.properties.JMSMessageID)
+        this.service.cancel(this.filterObject.queueName, match.properties.JMSMessageID)
             .subscribe(function (res) {
                 match.properties.status = 'CANCELED';
                 $this.cfpLoadingBar.complete();
@@ -371,15 +441,29 @@ export class QueuesComponent implements OnInit, OnDestroy{
     };
     reschedule(match) {
         let $this = this;
-        $this.cfpLoadingBar.start();
-        this.service.reschedule(this.queueName, match.properties.JMSMessageID)
-            .subscribe((res) => {
-                $this.search(0);
-                $this.cfpLoadingBar.complete();
-            }, (err) => {
-                $this.cfpLoadingBar.complete();
-                $this.httpErrorHandler.handleError(err);
-            });
+        this.j4care.selectDevice((res)=>{
+                if(res){
+                    $this.cfpLoadingBar.start();
+                    let filter = {};
+                    if(_.hasIn(res, "schema_model.newDeviceName") && res.schema_model.newDeviceName != ""){
+                        filter["newDeviceName"] = res.schema_model.newDeviceName;
+                    }
+                    this.service.reschedule(this.filterObject.queueName, match.properties.JMSMessageID, filter)
+                        .subscribe((res) => {
+                            $this.search(0);
+                            $this.cfpLoadingBar.complete();
+                        }, (err) => {
+                            $this.cfpLoadingBar.complete();
+                            $this.httpErrorHandler.handleError(err);
+                        });
+                }
+            },
+            this.devices.map(device=>{
+                return {
+                    text:device.dicomDeviceName,
+                    value:device.dicomDeviceName
+                }
+            }));
     };
     checkAll(event){
         console.log("in checkall",event.target.checked);
@@ -395,7 +479,7 @@ export class QueuesComponent implements OnInit, OnDestroy{
             if (result){
                 $this.cfpLoadingBar.start();
 
-                this.service.delete(this.queueName, match.properties.JMSMessageID)
+                this.service.delete(this.filterObject.queueName, match.properties.JMSMessageID)
                 .subscribe((res) => {
                     $this.search($this.matches[0].offset);
                     $this.cfpLoadingBar.complete();
@@ -417,7 +501,7 @@ export class QueuesComponent implements OnInit, OnDestroy{
                 this.cfpLoadingBar.start();
                 this.matches.forEach((match)=>{
                     if(match.checked){
-                        this.service[mode](this.queueName, match.properties.JMSMessageID)
+                        this.service[mode](this.filterObject.queueName, match.properties.JMSMessageID)
                             .subscribe((res) => {
                             },(err)=>{
                                 this.httpErrorHandler.handleError(err);
@@ -480,16 +564,16 @@ export class QueuesComponent implements OnInit, OnDestroy{
         });
     };*/
     hasOlder(objs) {
-        return objs && (objs.length === this.limit);
+        return objs && (objs.length === this.filterObject.limit);
     };
     hasNewer(objs) {
         return objs && objs.length && objs[0].offset;
     };
     newerOffset(objs) {
-        return Math.max(0, objs[0].offset - this.limit);
+        return Math.max(0, objs[0].offset - this.filterObject.limit);
     };
     olderOffset(objs) {
-        return objs[0].offset + this.limit;
+        return objs[0].offset + this.filterObject.limit;
     };
     initQuery() {
         let $this = this;
@@ -499,17 +583,21 @@ export class QueuesComponent implements OnInit, OnDestroy{
             .subscribe((res) => {
                 $this.getDevices();
                 $this.queues = res;
-                if(!this.urlParam && !this.queueName)
-                    $this.queueName = res[0].name;
+                if(!this.urlParam && !this.filterObject.queueName)
+                    this.filterObject.queueName = res[0].name;
                 $this.cfpLoadingBar.complete();
             });
+    }
+    setFilters(){
+        this.filterSchema = j4care.prepareFlatFilterObject(this.service.getFilterSchema(this.queues,this.devices,this.counText),3);
     }
     getDevices(){
         this.cfpLoadingBar.start();
         this.service.getDevices().subscribe(devices=>{
             this.cfpLoadingBar.complete();
             this.devices = devices.filter(dev => dev.hasArcDevExt);
-            if(this.urlParam)
+            this.setFilters();
+            if(this.urlParam && Object.keys(this.urlParam).length > 0)
                 this.search(0);
         },(err)=>{
             this.cfpLoadingBar.complete();

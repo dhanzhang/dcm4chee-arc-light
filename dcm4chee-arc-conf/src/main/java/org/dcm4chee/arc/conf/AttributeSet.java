@@ -48,7 +48,12 @@ import java.util.Map;
  */
 public class AttributeSet implements Comparable<AttributeSet> {
 
-    public enum Type { DIFF_RS, WADO_RS, LEADING_CFIND_SCP}
+    public enum Type {
+        QIDO_RS,
+        WADO_RS,
+        DIFF_RS,
+        LEADING_CFIND_SCP
+    }
 
     private Type type;
     private String id;

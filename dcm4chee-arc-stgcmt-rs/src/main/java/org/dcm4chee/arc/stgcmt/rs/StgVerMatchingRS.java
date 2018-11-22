@@ -51,6 +51,7 @@ import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.StorageVerificationPolicy;
+import org.dcm4chee.arc.entity.Patient;
 import org.dcm4chee.arc.entity.StorageVerificationTask;
 import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
@@ -71,6 +72,8 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.List;
 
 /**
@@ -130,6 +133,10 @@ public class StgVerMatchingRS {
 
     @QueryParam("ExternalRetrieveAET!")
     private String externalRetrieveAETNot;
+
+    @QueryParam("patientVerificationStatus")
+    @Pattern(regexp = "UNVERIFIED|VERIFIED|NOT_FOUND|VERIFICATION_FAILED")
+    private String patientVerificationStatus;
 
     @QueryParam("batchID")
     private String batchID;
@@ -230,48 +237,65 @@ public class StgVerMatchingRS {
         if (ae == null || !ae.isInstalled())
             return errResponse(Response.Status.NOT_FOUND, "No such Application Entity: " + aet);
 
-        ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        QueryContext ctx = queryContext(method, qrlevel, studyInstanceUID, seriesInstanceUID, ae);
-        String warning = null;
-        int count = 0;
-        Response.Status status = Response.Status.ACCEPTED;
-        try (Query query = queryService.createQuery(ctx)) {
-            query.initQuery();
-            Transaction transaction = query.beginTransaction();
-            try {
-                query.setFetchSize(arcDev.getQueryFetchSize());
-                query.executeQuery();
-                while (query.hasMoreMatches()) {
-                    Attributes match = query.nextMatch();
-                    if (stgCmtMgr.scheduleStgVerTask(createStgVerTask(match, qrlevel),
-                            HttpServletRequestInfo.valueOf(request), batchID)) {
-                        count++;
+        try {
+            ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+            QueryContext ctx = queryContext(method, qrlevel, studyInstanceUID, seriesInstanceUID, ae);
+            String warning = null;
+            int count = 0;
+            Response.Status status = Response.Status.ACCEPTED;
+            try (Query query = queryService.createQuery(ctx)) {
+                query.initQuery();
+                Transaction transaction = query.beginTransaction();
+                try {
+                    query.setFetchSize(arcDev.getQueryFetchSize());
+                    query.executeQuery();
+                    while (query.hasMoreMatches()) {
+                        Attributes match = query.nextMatch();
+                        if (stgCmtMgr.scheduleStgVerTask(createStgVerTask(match, qrlevel),
+                                HttpServletRequestInfo.valueOf(request), batchID)) {
+                            count++;
+                        }
+                    }
+                } catch (QueueSizeLimitExceededException e) {
+                    status = Response.Status.SERVICE_UNAVAILABLE;
+                    warning = e.getMessage();
+                } catch (Exception e) {
+                    warning = e.getMessage();
+                    status = Response.Status.INTERNAL_SERVER_ERROR;
+                } finally {
+                    try {
+                        transaction.commit();
+                    } catch (Exception e) {
+                        LOG.warn("Failed to commit transaction:\n", e);
                     }
                 }
-            } catch (QueueSizeLimitExceededException e) {
-                status = Response.Status.SERVICE_UNAVAILABLE;
-                warning = e.getMessage();
-            } catch (Exception e) {
-                warning = e.getMessage();
-                status = Response.Status.INTERNAL_SERVER_ERROR;
-            } finally {
-                try {
-                    transaction.commit();
-                } catch (Exception e) {
-                    LOG.warn("Failed to commit transaction:\n", e);
-                }
             }
+            Response.ResponseBuilder builder = Response.status(status);
+            if (warning != null)
+                builder.header("Warning", warning);
+            return builder.entity("{\"count\":" + count + '}').build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(e);
         }
-        Response.ResponseBuilder builder = Response.status(status);
-        if (warning != null)
-            builder.header("Warning", warning);
-        return builder.entity("{\"count\":" + count + '}').build();
     }
 
     private static Response errResponse(Response.Status status, String message) {
         return Response.status(status)
                 .entity("{\"errorMessage\":\"" + message + "\"}")
                 .build();
+    }
+
+    private Response errResponseAsTextPlain(Exception e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity(exceptionAsString(e))
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 
     private QueryContext queryContext(
@@ -312,6 +336,8 @@ public class StgVerMatchingRS {
         queryParam.setCompressionFailed(Boolean.parseBoolean(compressionfailed));
         queryParam.setExternalRetrieveAET(externalRetrieveAET);
         queryParam.setExternalRetrieveAETNot(externalRetrieveAETNot);
+        if (patientVerificationStatus != null)
+            queryParam.setPatientVerificationStatus(Patient.VerificationStatus.valueOf(patientVerificationStatus));
         return queryParam;
     }
 

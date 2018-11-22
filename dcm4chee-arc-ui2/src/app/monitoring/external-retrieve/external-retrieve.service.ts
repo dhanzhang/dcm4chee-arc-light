@@ -3,7 +3,7 @@ import { Headers } from '@angular/http';
 import {J4careHttpService} from "../../helpers/j4care-http.service";
 import {WindowRefService} from "../../helpers/window-ref.service";
 import {AppService} from "../../app.service";
-import {DevicesService} from "../../devices/devices.service";
+import {DevicesService} from "../../configuration/devices/devices.service";
 import * as _ from 'lodash';
 import {j4care} from "../../helpers/j4care.service";
 
@@ -43,8 +43,8 @@ export class ExternalRetrieveService {
         return this.$http.delete(`../monitor/retrieve${urlParam}`, this.header)
             .map(res => j4care.redirectOnAuthResponse(res));
     }
-    reschedule(pk){
-        return this.$http.post(`../monitor/retrieve/${pk}/reschedule`, {});
+    reschedule(pk, data){
+        return this.$http.post(`../monitor/retrieve/${pk}/reschedule`, data);
     }
      rescheduleAll(filter){
         let urlParam = this.mainservice.param(filter);

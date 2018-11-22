@@ -6,9 +6,15 @@ import { RouterModule }   from '@angular/router';
 import {AppComponent} from './app.component';
 import {
     MatCheckboxModule,
-    MatDialogConfig, MatDialogModule, MatFormFieldModule, MatIconModule, MatInputModule, MatProgressBarModule,
+    MatIconModule,
+    MatProgressBarModule,
+    MatDialogConfig,
+    MatDialogModule,
+    MatFormFieldModule,
+    MatInputModule,
     MatProgressSpinnerModule,
-    MatSelectModule
+    MatSelectModule,
+    MatRadioModule,
 } from '@angular/material';
 import { StudiesComponent } from './studies/studies.component';
 import { PageNotFoundComponent } from './page-not-found/page-not-found.component';
@@ -38,8 +44,7 @@ import { TooltipDirective } from './helpers/tooltip/tooltip.directive';
 import { ComparewithiodPipe } from './pipes/comparewithiod.pipe';
 import { PlaceholderchangerDirective } from './helpers/placeholderchanger.directive';
 import {QueuesService} from './monitoring/queues/queues.service';
-import { DevicesComponent } from './devices/devices.component';
-import {DevicesService} from './devices/devices.service';
+import { DevicesComponent } from './configuration/devices/devices.component';
 import { DeviceConfiguratorComponent } from './configuration/device-configurator/device-configurator.component';
 import {DynamicFormElementComponent} from './widgets/dynamicform/dynamic-form-element.component';
 import {DynamicFormComponent} from './widgets/dynamicform/dynamic-form.component';
@@ -80,7 +85,7 @@ import {PermissionService} from "./helpers/permissions/permission.service";
 import { PermissionDirective } from './helpers/permissions/permission.directive';
 import {LoadingBarModule} from "@ngx-loading-bar/core";
 import {PermissionDeniedComponent} from "./helpers/permissions/permission-denied.component";
-import {CsvRetrieveService} from "./widgets/dialogs/csv-retrieve/csv-retrieve.service";
+import {CsvUploadService} from "./widgets/dialogs/csv-upload/csv-upload.service";
 import { StackedProgressComponent } from './helpers/stacked-progress/stacked-progress.component';
 import { DiffMonitorComponent } from './monitoring/diff-monitor/diff-monitor.component';
 import {DiffMonitorService} from "./monitoring/diff-monitor/diff-monitor.service";
@@ -90,6 +95,7 @@ import {RangePickerService} from "./widgets/range-picker/range-picker.service";
 import { StorageVerificationComponent } from './monitoring/storage-verification/storage-verification.component';
 import {StorageVerificationService} from "./monitoring/storage-verification/storage-verification.service";
 import { ConfigTabComponent } from './configuration/config-tab.component';
+import {DevicesService} from './configuration/devices/devices.service';
 
 @NgModule({
     declarations: [
@@ -157,6 +163,7 @@ import { ConfigTabComponent } from './configuration/config-tab.component';
         MatFormFieldModule,
         MatProgressSpinnerModule,
         MatCheckboxModule,
+        MatRadioModule,
         WidgetsModule,
         CommonModule,
         CalendarModule,
@@ -203,7 +210,6 @@ import { ConfigTabComponent } from './configuration/config-tab.component';
         MatDialogConfig,
         WidgetsComponents,
         AppService,
-        StudiesService,
         ControlService,
         QueuesService,
         DevicesService,
@@ -218,6 +224,7 @@ import { ConfigTabComponent } from './configuration/config-tab.component';
         DeviceConfiguratorService,
         UploadDicomService,
         WindowRefService,
+        StudiesService,
         Hl7ApplicationsService,
         AeListService,
         HttpErrorHandler,
@@ -226,7 +233,7 @@ import { ConfigTabComponent } from './configuration/config-tab.component';
         DynamicFieldService,
         AuthGuard,
         PermissionService,
-        CsvRetrieveService,
+        CsvUploadService,
         DiffMonitorService,
         RangePickerService,
         StorageVerificationService,

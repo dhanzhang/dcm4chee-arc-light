@@ -46,6 +46,11 @@
           "nn[<schedule>]": "number"
         }
       },
+      "dcmDeleterThreads": {
+        "title": "Deleter Threads",
+        "description": "Number of Threads used for deletion of objects from the Storage System.",
+        "type": "number"
+      },
       "dcmExternalRetrieveAET": {
         "title": "External Retrieve AET",
         "description": "Constrain deletion of Studies, if usable space falls below the configured threshold, to Studies which objects are retrievable using this AE from an external C-MOVE SCP.",
@@ -55,6 +60,11 @@
         "title": "Export Storage ID",
         "description": "Constrain deletion of Studies, if usable space falls below the configured threshold, to Studies which objects are also accessible from the specified other storage.",
         "type": "string"
+      },
+      "dcmNoDeletionConstraint": {
+        "title": "No Deletion Constraint",
+        "description": "Specifies if Studies shall be deleted without any condition (= no External Retrieve AET and no Export Storage ID)",
+        "type": "boolean"
       },
       "dcmRetrieveCacheStorageID": {
         "title": "Retrieve Cache Storage ID",

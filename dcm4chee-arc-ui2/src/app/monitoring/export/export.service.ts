@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import {Http, Headers} from '@angular/http';
 import {AppService} from '../../app.service';
 import {J4careHttpService} from "../../helpers/j4care-http.service";
-import {DevicesService} from "../../devices/devices.service";
+import {DevicesService} from "../../configuration/devices/devices.service";
 import {WindowRefService} from "../../helpers/window-ref.service";
 import * as _ from 'lodash';
 import {j4care} from "../../helpers/j4care.service";
@@ -94,30 +94,13 @@ export class ExportService {
     }
     statusValues(){
         return [
-            {
-                value:"SCHEDULED",
-                text:"SCHEDULED"
-            },
-            {
-                value:"IN PROCESS",
-                text:"IN PROCESS"
-            },
-            {
-                value:"COMPLETED",
-                text:"COMPLETED"
-            },
-            {
-                value:"WARNING",
-                text:"WARNING"
-            },
-            {
-                value:"FAILED",
-                text:"FAILED"
-            },
-            {
-                value:"CANCELED",
-                text:"CANCELED"
-            }
+            "TO SCHEDULE",
+            "SCHEDULED",
+            "IN PROCESS",
+            "COMPLETED",
+            "WARNING",
+            "FAILED",
+            "CANCELED"
         ];
     }
     getFilterSchema(exporters, devices, countText){
@@ -134,7 +117,8 @@ export class ExportService {
                         }),
                         showStar:true,
                         filterKey:"ExporterID",
-                        description:"Exporter ID"
+                        description:"Exporter ID",
+                        placeholder:"Exporter ID"
                     },
                     {
                         tag:"select",
@@ -146,7 +130,8 @@ export class ExportService {
                         }),
                         showStar:true,
                         filterKey:"dicomDeviceName",
-                        description:"Device Name to filter by"
+                        description:"Device Name to filter by",
+                        placeholder:"Device Name"
                     }
                 ],
                 [
@@ -171,7 +156,12 @@ export class ExportService {
                     },
                     {
                         tag:"select",
-                        options:this.statusValues(),
+                        options:this.statusValues().map(status=>{
+                            return {
+                                text:status,
+                                value:status
+                            }
+                        }),
                         filterKey:"status",
                         showStar:true,
                         description:"Status of tasks to filter by",

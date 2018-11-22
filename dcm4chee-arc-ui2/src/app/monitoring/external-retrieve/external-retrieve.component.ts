@@ -16,10 +16,11 @@ import {J4careHttpService} from "../../helpers/j4care-http.service";
 import "rxjs/add/observable/forkJoin";
 import {LoadingBarService} from '@ngx-loading-bar/core';
 import {environment} from "../../../environments/environment";
-import {CsvRetrieveComponent} from "../../widgets/dialogs/csv-retrieve/csv-retrieve.component";
+import {CsvUploadComponent} from "../../widgets/dialogs/csv-upload/csv-upload.component";
 import {Globalvar} from "../../constants/globalvar";
 import {ActivatedRoute} from "@angular/router";
 import {PermissionService} from "../../helpers/permissions/permission.service";
+import {Validators} from "@angular/forms";
 
 @Component({
   selector: 'external-retrieve',
@@ -79,7 +80,8 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
       public dialog: MatDialog,
       public config: MatDialogConfig,
       public viewContainerRef: ViewContainerRef,
-      private permissionService:PermissionService
+      private permissionService:PermissionService,
+      private j4care:j4care
     ) { }
 
     ngOnInit(){
@@ -113,7 +115,7 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
                 loader: false
             };
         });
-        if (!this.mainservice.user){
+/*        if (!this.mainservice.user){
             this.mainservice.user = this.mainservice.getUserInfo().share();
             this.mainservice.user
                 .subscribe(
@@ -151,7 +153,7 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
         }else{
             this.user = this.mainservice.user;
             this.isRole = this.mainservice.isRole;
-        }
+        }*/
 /*        console.log("localStorage",localStorage.getItem('externalRetrieveFilters'));
         console.log("localStorageTES",localStorage.getItem('externalRetrieveFiltersTESG'));
         let savedFilters = localStorage.getItem('externalRetrieveFilters');
@@ -244,7 +246,7 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
         if(this.urlParam){
             this.filterObject = this.urlParam;
             this.filterObject["limit"] = 20;
-            this.getTasks(0);
+            // this.getTasks(0);
         }
     }
     confirm(confirmparameters){
@@ -288,16 +290,70 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
         })
     }
     uploadCsv(){
-        this.dialogRef = this.dialog.open(CsvRetrieveComponent, {
+        this.dialogRef = this.dialog.open(CsvUploadComponent, {
             height: 'auto',
             width: '500px'
         });
-        this.dialogRef.componentInstance.aes = this.remoteAET ;
+        this.dialogRef.componentInstance.aes = this.remoteAET;
         this.dialogRef.componentInstance.params = {
-            aet:this.filterObject['LocalAET']||'',
-            externalAET:this.filterObject['RemoteAET']||'',
-            destinationAET:this.filterObject['DestinationAET']||'',
+            LocalAET:this.filterObject['LocalAET']||'',
+            RemoteAET:this.filterObject['RemoteAET']||'',
+            DestinationAET:this.filterObject['DestinationAET']||'',
             batchID:this.filterObject['batchID']||'',
+            formSchema:[
+                {
+                    tag:"select",
+                    options:this.remoteAET,
+                    showStar:true,
+                    filterKey:"LocalAET",
+                    description:"Local AET",
+                    placeholder:"Local AET",
+                    validation:Validators.required
+                },{
+                    tag:"select",
+                    options:this.remoteAET,
+                    showStar:true,
+                    filterKey:"RemoteAET",
+                    description:"Romote AET",
+                    placeholder:"Romote AET",
+                    validation:Validators.required
+                },{
+                    tag:"input",
+                    type:"number",
+                    filterKey:"field",
+                    description:"Field",
+                    placeholder:"Field",
+                    validation:Validators.minLength(1),
+                    defaultValue:1
+                },{
+                    tag:"select",
+                    options:this.remoteAET,
+                    showStar:true,
+                    filterKey:"DestinationAET",
+                    description:"Destination AET",
+                    placeholder:"Destination AET",
+                    validation:Validators.required
+                },{
+                    tag:"input",
+                    type:"number",
+                    filterKey:"priority",
+                    description:"Priority",
+                    placeholder:"Priority"
+                },
+                {
+                    tag:"input",
+                    type:"text",
+                    filterKey:"batchID",
+                    description:"Batch ID",
+                    placeholder:"Batch ID"
+                }
+            ],
+            prepareUrl:(filter)=>{
+                let clonedFilters = {};
+                if(filter['priority']) clonedFilters['priority'] = filter['priority'];
+                if(filter['batchID']) clonedFilters['batchID'] = filter['batchID'];
+                return `../aets/${filter.LocalAET}/dimse/${filter.RemoteAET}/studies/csv:${filter.field}/export/dicom:${filter.DestinationAET}${j4care.getUrlParams(clonedFilters)}`;
+            }
         };
         this.dialogRef.afterClosed().subscribe((ok)=>{
             if(ok){
@@ -332,17 +388,23 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
 
                     break;
                 case "reschedule":
-                        this.service.rescheduleAll(this.filterObject).subscribe((res)=>{
-                            this.mainservice.setMessage({
-                                'title': 'Info',
-                                'text': res.count + ' tasks rescheduled successfully!',
-                                'status': 'info'
-                            });
-                            this.cfpLoadingBar.complete();
-                        }, (err) => {
-                            this.cfpLoadingBar.complete();
-                            this.httpErrorHandler.handleError(err);
-                        });
+                    this.j4care.selectDevice((res)=>{
+                            if(res){
+                                let filter = Object.assign({},this.filterObject);
+                                if(_.hasIn(res, "schema_model.newDeviceName") && res.schema_model.newDeviceName != ""){
+                                    filter["newDeviceName"] = res.schema_model.newDeviceName;
+                                }
+                                this.service.rescheduleAll(filter).subscribe((res)=>{
+                                    this.mainservice.showMsg(res.count + ' tasks rescheduled successfully!');
+                                    this.cfpLoadingBar.complete();
+                                }, (err) => {
+                                    this.cfpLoadingBar.complete();
+                                    this.httpErrorHandler.handleError(err);
+                                });
+                            }
+                        },
+                        this.devices);
+
                     break;
                 case "delete":
                         this.service.deleteAll(this.filterObject).subscribe((res)=>{
@@ -362,6 +424,38 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
             }
             this.allAction = "";
             this.allAction = undefined;
+        });
+    }
+    deleteBatchedTask(batchedTask){
+        this.confirm({
+            content: 'Are you sure you want to delete all tasks to this batch?'
+        }).subscribe(ok=>{
+            if(ok){
+                if(batchedTask.properties.batchID){
+                    let filter = Object.assign({},this.filterObject);
+                    filter["batchID"] = batchedTask.properties.batchID;
+                    delete filter["limit"];
+                    delete filter["offset"];
+                    this.service.deleteAll(filter).subscribe((res)=>{
+                        this.mainservice.setMessage({
+                            'title': 'Info',
+                            'text': res.deleted + ' tasks deleted successfully!',
+                            'status': 'info'
+                        });
+                        this.cfpLoadingBar.complete();
+                        this.getTasks(0)
+                    }, (err) => {
+                        this.cfpLoadingBar.complete();
+                        this.httpErrorHandler.handleError(err);
+                    });
+                }else{
+                    this.mainservice.setMessage({
+                        'title': 'Error',
+                        'text': 'Batch ID not found!',
+                        'status': 'error'
+                    });
+                }
+            }
         });
     }
     delete(match){
@@ -437,22 +531,32 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
         };
         this.confirm(parameters).subscribe(result => {
             if (result){
-                $this.cfpLoadingBar.start();
-                this.service.reschedule(match.properties.pk)
-                    .subscribe(
-                        (res) => {
-                            $this.getTasks(match.offset||0);
-                            $this.cfpLoadingBar.complete();
-                            $this.mainservice.setMessage({
-                                'title': 'Info',
-                                'text': 'Task rescheduled successfully!',
-                                'status': 'info'
-                            });
-                        },
-                        (err) => {
-                            $this.cfpLoadingBar.complete();
-                            $this.httpErrorHandler.handleError(err);
-                        });
+                this.j4care.selectDevice((res)=>{
+                        if(res){
+                            let filter = {};
+                            if(_.hasIn(res, "schema_model.newDeviceName") && res.schema_model.newDeviceName != ""){
+                                filter["newDeviceName"] = res.schema_model.newDeviceName;
+                            }
+                            $this.cfpLoadingBar.start();
+                            this.service.reschedule(match.properties.pk, filter)
+                                .subscribe(
+                                    (res) => {
+                                        $this.getTasks(match.offset||0);
+                                        $this.cfpLoadingBar.complete();
+                                        $this.mainservice.showMsg('Task rescheduled successfully!');
+                                    },
+                                    (err) => {
+                                        $this.cfpLoadingBar.complete();
+                                        $this.httpErrorHandler.handleError(err);
+                                    });
+                        }
+                    },
+                    this.devices.map(device=>{
+                        return {
+                            text:device.dicomDeviceName,
+                            value:device.dicomDeviceName
+                        }
+                    }));
             }
         });
     };
@@ -637,7 +741,7 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
                         $this.initExporters(retries - 1);
                 });
     }
-    getDevices(){
+/*    getDevices(){
         this.cfpLoadingBar.start();
         this.service.getDevices().subscribe(devices=>{
             this.cfpLoadingBar.complete();
@@ -646,7 +750,7 @@ export class ExternalRetrieveComponent implements OnInit,OnDestroy {
             this.cfpLoadingBar.complete();
             console.error("Could not get devices",err);
         });
-    }
+    }*/
     ngOnDestroy(){
         if(this.timer.started){
             this.timer.started = false;
