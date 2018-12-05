@@ -52,13 +52,15 @@ import org.dcm4che3.util.StringUtils;
 import org.dcm4che3.ws.rs.MediaTypes;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
+import org.dcm4chee.arc.conf.AttributeSet;
+import org.dcm4chee.arc.conf.Entity;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.query.Query;
 import org.dcm4chee.arc.query.QueryContext;
 import org.dcm4chee.arc.query.QueryService;
 import org.dcm4chee.arc.query.util.QIDO;
 import org.dcm4chee.arc.query.util.QueryAttributes;
-import org.dcm4chee.arc.validation.constraints.ValidUriInfo;
+import org.dcm4chee.arc.validation.constraints.InvokeValidate;
 import org.hibernate.Transaction;
 import org.jboss.resteasy.annotations.cache.NoCache;
 import org.jboss.resteasy.plugins.providers.multipart.MultipartRelatedOutput;
@@ -87,7 +89,7 @@ import java.util.stream.Stream;
  */
 @RequestScoped
 @Path("aets/{AETitle}/rs")
-@ValidUriInfo(type = QueryAttributes.class)
+@InvokeValidate(type = QidoRS.class)
 public class QidoRS {
 
     private static final Logger LOG = LoggerFactory.getLogger(QidoRS.class);
@@ -163,11 +165,19 @@ public class QidoRS {
     @QueryParam("accept")
     private List<String> accept;
 
+    @QueryParam("includedefaults")
+    @Pattern(regexp = "true|false")
+    private String includedefaults;
+
     private char csvDelimiter = ',';
 
     @Override
     public String toString() {
         return request.getRequestURI() + '?' + request.getQueryString();
+    }
+
+    public void validate() {
+        new QueryAttributes(uriInfo, attributeSetMap());
     }
 
     @GET
@@ -311,7 +321,7 @@ public class QidoRS {
     @Produces("application/json")
     public Response sizeOfStudies() {
         logRequest();
-        QueryAttributes queryAttrs = new QueryAttributes(uriInfo);
+        QueryAttributes queryAttrs = new QueryAttributes(uriInfo, null);
         QueryContext ctx = newQueryContext(
                 "SizeOfStudies", queryAttrs, null, null, Model.STUDY);
         try (Query query = service.createStudyQuery(ctx)) {
@@ -338,7 +348,7 @@ public class QidoRS {
 
     private Response count(String method, Model model, String studyInstanceUID, String seriesInstanceUID) {
         logRequest();
-        QueryAttributes queryAttrs = new QueryAttributes(uriInfo);
+        QueryAttributes queryAttrs = new QueryAttributes(uriInfo, null);
         QueryContext ctx = newQueryContext(method, queryAttrs, studyInstanceUID, seriesInstanceUID, model);
         try (Query query = model.createQuery(service, ctx)) {
             return Response.ok("{\"count\":" + query.fetchCount() + '}').build();
@@ -347,13 +357,25 @@ public class QidoRS {
         }
     }
 
+    private Map<String, AttributeSet> attributeSetMap() {
+        return device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).getAttributeSet(AttributeSet.Type.QIDO_RS);
+    }
+
     private Response search(String method, Model model, String studyInstanceUID, String seriesInstanceUID, QIDO qido) {
         logRequest();
         Output output = selectMediaType();
-        QueryAttributes queryAttrs = new QueryAttributes(uriInfo);
+        QueryAttributes queryAttrs = new QueryAttributes(uriInfo, attributeSetMap());
         QueryContext ctx = newQueryContext(method, queryAttrs, studyInstanceUID, seriesInstanceUID, model);
-        ctx.setReturnKeys(queryAttrs.getReturnKeys(qido.includetags));
+        ctx.setReturnKeys(queryAttrs.isIncludeAll()
+                ? null
+                : includeDefaults() || queryAttrs.getQueryKeys().isEmpty()
+                ? queryAttrs.getReturnKeys(qido.includetags)
+                : queryAttrs.getQueryKeys());
         ArchiveAEExtension arcAE = ctx.getArchiveAEExtension();
+        if (output == Output.CSV) {
+            model.setIncludeAll(queryAttrs.isIncludeAll());
+            model.setReturnKeys(ctx.getReturnKeys());
+        }
         try (Query query = model.createQuery(service, ctx)) {
             query.initQuery();
             int maxResults = arcAE.qidoMaxNumberOfResults();
@@ -402,6 +424,10 @@ public class QidoRS {
         }
     }
 
+    private boolean includeDefaults() {
+        return !"false".equals(includedefaults);
+    }
+
     private void logRequest() {
         LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
     }
@@ -416,7 +442,7 @@ public class QidoRS {
         if (acceptableMediaTypes.stream()
                 .anyMatch(
                         ((Predicate<MediaType>) MediaTypes.APPLICATION_DICOM_JSON_TYPE::isCompatible)
-                        .or(MediaType.APPLICATION_JSON_TYPE::isCompatible)))
+                                .or(MediaType.APPLICATION_JSON_TYPE::isCompatible)))
             return Output.JSON;
 
         if (acceptableMediaTypes.stream()
@@ -489,8 +515,7 @@ public class QidoRS {
     }
 
     private enum Model {
-        PATIENT(QueryRetrieveLevel2.PATIENT, QPatient.patient.pk, UID.PatientRootQueryRetrieveInformationModelFIND,
-                CSV.PATIENT){
+        PATIENT(QueryRetrieveLevel2.PATIENT, QPatient.patient.pk, UID.PatientRootQueryRetrieveInformationModelFIND){
             @Override
             public AttributesCoercion getAttributesCoercion(QueryService service, QueryContext ctx) {
                 return null;
@@ -500,31 +525,28 @@ public class QidoRS {
             public void addRetrieveURL(QidoRS qidoRS, Attributes match) {
             }
         },
-        STUDY(QueryRetrieveLevel2.STUDY, QStudy.study.pk, UID.StudyRootQueryRetrieveInformationModelFIND,
-                CSV.STUDY) {
+        STUDY(QueryRetrieveLevel2.STUDY, QStudy.study.pk, UID.StudyRootQueryRetrieveInformationModelFIND) {
             @Override
             public StringBuffer retrieveURL(QidoRS qidoRS, Attributes match) {
                 return super.retrieveURL(qidoRS, match)
                         .append("/studies/").append(match.getString(Tag.StudyInstanceUID));
             }
         },
-        SERIES(QueryRetrieveLevel2.SERIES, QSeries.series.pk, UID.StudyRootQueryRetrieveInformationModelFIND,
-                CSV.SERIES) {
+        SERIES(QueryRetrieveLevel2.SERIES, QSeries.series.pk, UID.StudyRootQueryRetrieveInformationModelFIND) {
             @Override
             StringBuffer retrieveURL(QidoRS qidoRS, Attributes match) {
                 return STUDY.retrieveURL(qidoRS, match)
                         .append("/series/").append(match.getString(Tag.SeriesInstanceUID));
             }
         },
-        INSTANCE(QueryRetrieveLevel2.IMAGE, QInstance.instance.pk, UID.StudyRootQueryRetrieveInformationModelFIND,
-                CSV.INSTANCE) {
+        INSTANCE(QueryRetrieveLevel2.IMAGE, QInstance.instance.pk, UID.StudyRootQueryRetrieveInformationModelFIND) {
             @Override
             StringBuffer retrieveURL(QidoRS qidoRS, Attributes match) {
                 return SERIES.retrieveURL(qidoRS, match)
                         .append("/instances/").append(match.getString(Tag.SOPInstanceUID));
             }
         },
-        MWL(null, QMWLItem.mWLItem.pk, UID.ModalityWorklistInformationModelFIND, CSV.MWL) {
+        MWL(null, QMWLItem.mWLItem.pk, UID.ModalityWorklistInformationModelFIND) {
             @Override
             Query createQuery(QueryService service, QueryContext ctx) {
                 return service.createMWLQuery(ctx);
@@ -543,13 +565,13 @@ public class QidoRS {
         final QueryRetrieveLevel2 qrLevel;
         final NumberPath<Long> pk;
         final String sopClassUID;
-        final CSV csv;
+        Attributes returnKeys;
+        boolean includeAll;
 
-        Model(QueryRetrieveLevel2 qrLevel, NumberPath<Long> pk, String sopClassUID, CSV csv) {
+        Model(QueryRetrieveLevel2 qrLevel, NumberPath<Long> pk, String sopClassUID) {
             this.qrLevel = qrLevel;
             this.pk = pk;
             this.sopClassUID = sopClassUID;
-            this.csv = csv;
         }
 
         QueryRetrieveLevel2 getQueryRetrieveLevel() {
@@ -581,6 +603,14 @@ public class QidoRS {
 
         String getSOPClassUID() {
             return sopClassUID;
+        }
+
+        void setIncludeAll(boolean includeAll) {
+            this.includeAll = includeAll;
+        }
+
+        void setReturnKeys(Attributes returnKeys) {
+            this.returnKeys = returnKeys;
         }
     }
 
@@ -671,9 +701,12 @@ public class QidoRS {
         final ArrayList<Attributes> matches = matches(method, query, model, coercion);
         return (StreamingOutput) out -> {
             Writer writer = new BufferedWriter(new OutputStreamWriter(out, "UTF-8"));
-            writeCSVHeader(writer, model.csv, csvDelimiter);
-            for (Attributes match : matches)
-                write(writer, match, model.csv, csvDelimiter);
+            int[] tags = tagsFrom(model);
+            if (tags.length != 0) {
+                writeCSVHeader(writer, tags, csvDelimiter);
+                for (Attributes match : matches)
+                    write(writer, match, tags, csvDelimiter);
+            }
             writer.flush();
         };
     }
@@ -694,24 +727,77 @@ public class QidoRS {
         return matches;
     }
 
-    private void writeCSVHeader(Writer writer, CSV csv, char delimiter) throws IOException {
-        ElementDictionary dict = ElementDictionary.getStandardElementDictionary();
-        writer.write(dict.keywordOf(csv.tags[0]));
-        writer.write(delimiter);
-        for (int i = 1; i < csv.tags.length; i++) {
-            writer.write(dict.keywordOf(csv.tags[i]));
-            writer.write(delimiter);
+    private int[] tagsFrom(Model model) {
+        return model.includeAll
+                ? allFieldsOf(model)
+                : nonSeqTagsFrom(model.returnKeys);
+    }
+
+    private int[] allFieldsOf(Model model) {
+        ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+        int[] tags = arcDev.getAttributeFilter(Entity.Patient).getSelection();
+        switch (model) {
+            case STUDY:
+                return allNonSeqTags(tags, arcDev.getAttributeFilter(Entity.Study).getSelection());
+            case SERIES:
+                return allNonSeqTags(tags,
+                        arcDev.getAttributeFilter(Entity.Study).getSelection(),
+                        arcDev.getAttributeFilter(Entity.Series).getSelection());
+            case INSTANCE:
+                return allNonSeqTags(tags,
+                        arcDev.getAttributeFilter(Entity.Study).getSelection(),
+                        arcDev.getAttributeFilter(Entity.Series).getSelection(),
+                        arcDev.getAttributeFilter(Entity.Instance).getSelection());
+            case MWL:
+                return allNonSeqTags(tags,
+                        arcDev.getAttributeFilter(Entity.MWL).getSelection());
         }
+        return allNonSeqTags(tags);
+    }
+
+    private int[] allNonSeqTags(int[]... tags) {
+        Set<Integer> allNonSeqTags = new HashSet<>();
+        ElementDictionary dict = ElementDictionary.getStandardElementDictionary();
+        for (int entityTags[] : tags)
+            for (int tag : entityTags)
+                if (dict.vrOf(tag) != VR.SQ)
+                    allNonSeqTags.add(tag);
+
+        return allNonSeqTags.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    private int[] nonSeqTagsFrom(Attributes attrs) {
+        Set<Integer> tags = new HashSet<>();
+        ElementDictionary dict = ElementDictionary.getStandardElementDictionary();
+        try {
+            attrs.accept((attrs1, tag, vr, value) -> {
+                if (dict.vrOf(tag) != VR.SQ)
+                    tags.add(tag);
+                return true;
+            }, false);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return tags.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    private void writeCSVHeader(Writer writer, int[] tags, char delimiter) throws IOException {
+        ElementDictionary dict = ElementDictionary.getStandardElementDictionary();
+        writer.write(dict.keywordOf(tags[0]));
+        for (int i = 1; i < tags.length; i++) {
+            writer.write(delimiter);
+            writer.write(dict.keywordOf(tags[i]));
+        }
+
         writer.write('\r');
         writer.write('\n');
     }
 
-    private void write(Writer writer, Attributes attrs, CSV csv, char delimiter) throws IOException {
-        writeNotNull(writer, attrs.getString(csv.tags[0]));
-        writer.write(delimiter);
-        for (int i = 1; i < csv.tags.length; i++) {
-            writeNotNull(writer, attrs.getString(csv.tags[i]));
+    private void write(Writer writer, Attributes attrs, int[] tags, char delimiter) throws IOException {
+        writeNotNull(writer, attrs.getString(tags[0]));
+        for (int i = 1; i < tags.length; i++) {
             writer.write(delimiter);
+            writeNotNull(writer, attrs.getString(tags[i]));
         }
         writer.write('\r');
         writer.write('\n');

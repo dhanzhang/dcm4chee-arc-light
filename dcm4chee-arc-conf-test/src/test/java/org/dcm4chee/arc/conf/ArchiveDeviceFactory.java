@@ -427,6 +427,22 @@ class ArchiveDeviceFactory {
             Tag.AccessionNumber,
             Tag.IssuerOfAccessionNumberSequence,
     };
+    static final int[] QIDO_STUDY_ATTRS = {
+            Tag.StudyDate,
+            Tag.StudyTime,
+            Tag.AccessionNumber,
+            Tag.ModalitiesInStudy,
+            Tag.ReferringPhysicianName,
+            Tag.PatientName,
+            Tag.PatientID,
+            Tag.PatientBirthDate,
+            Tag.PatientSex,
+            Tag.StudyID,
+            Tag.StudyInstanceUID,
+            Tag.StudyDescription,
+            Tag.NumberOfStudyRelatedSeries,
+            Tag.NumberOfStudyRelatedInstances
+    };
     static final int[] MPPS_ATTRS = {
             Tag.SpecificCharacterSet,
             Tag.Modality,
@@ -990,7 +1006,7 @@ class ArchiveDeviceFactory {
     };
 
     static final String AE_TITLE = "DCM4CHEE";
-    static final String DCM4CHEE_ARC_VERSION = "5.14.1";
+    static final String DCM4CHEE_ARC_VERSION = "5.15.1";
     static final String DCM4CHEE_ARC_KEY_JKS =  "${jboss.server.config.url}/dcm4chee-arc/key.jks";
     static final String HL7_ADT2DCM_XSL = "${jboss.server.temp.url}/dcm4chee-arc/hl7-adt2dcm.xsl";
     static final String HL7_DCM2ADT_XSL = "${jboss.server.temp.url}/dcm4chee-arc/hl7-dcm2adt.xsl";
@@ -1517,6 +1533,11 @@ class ArchiveDeviceFactory {
                 "Default",
                 null,
                 LEADING_CFIND_SCP_ATTRS));
+        ext.addAttributeSet(newAttributeSet(AttributeSet.Type.QIDO_RS,
+                0, "study",
+                "Sample Study Attribute Set",
+                null,
+                QIDO_STUDY_ATTRS));
 
         ext.addRejectionNote(createRejectionNote("Quality",
                 RejectionNote.Type.REJECTED_FOR_QUALITY_REASONS,

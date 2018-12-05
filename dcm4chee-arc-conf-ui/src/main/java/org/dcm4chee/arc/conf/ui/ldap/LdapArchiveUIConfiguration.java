@@ -262,9 +262,11 @@ public class LdapArchiveUIConfiguration extends LdapDicomConfigurationExtension 
         attrs.put(new BasicAttribute("objectclass", "dcmuiDashboardConfig"));
         attrs.put(new BasicAttribute("dcmuiDashboardConfigName", uiDashboardConfig.getName()));
         LdapUtils.storeNotEmpty(ldapObj, attrs, "dcmuiQueueName", uiDashboardConfig.getQueueNames());
+        LdapUtils.storeNotDef(ldapObj,attrs,"dcmuiShowStarBlock",uiDashboardConfig.isShowStarBlock(),true);
         LdapUtils.storeNotEmpty(ldapObj, attrs, "dcmuiExportName", uiDashboardConfig.getExportNames());
         LdapUtils.storeNotEmpty(ldapObj, attrs, "dicomuiDeviceName", uiDashboardConfig.getDeviceNames());
         LdapUtils.storeNotEmpty(ldapObj, attrs, "dicomuiIgnoreParams", uiDashboardConfig.getIgnoreParams());
+        LdapUtils.storeNotEmpty(ldapObj, attrs, "dicomuiDockerContainer", uiDashboardConfig.getDockerContainers());
         LdapUtils.storeNotNullOrDef(ldapObj, attrs,"dcmuiCountAET",uiDashboardConfig.getCountAet(),null);
         return attrs;
     }
@@ -510,11 +512,13 @@ public class LdapArchiveUIConfiguration extends LdapDicomConfigurationExtension 
                 SearchResult sr = ne.next();
                 Attributes attrs = sr.getAttributes();
                 UIDashboardConfig uiDashboardConfig = new UIDashboardConfig((String) attrs.get("dcmuiDashboardConfigName").get());
+                uiDashboardConfig.setShowStarBlock(LdapUtils.booleanValue(attrs.get("dcmuiShowStarBlock"), true));
                 uiDashboardConfig.setCountAet(LdapUtils.stringValue(attrs.get("dcmuiCountAET"),null));
                 uiDashboardConfig.setQueueNames(LdapUtils.stringArray(attrs.get("dcmuiQueueName")));
                 uiDashboardConfig.setExportNames(LdapUtils.stringArray(attrs.get("dcmuiExportName")));
                 uiDashboardConfig.setDeviceNames(LdapUtils.stringArray(attrs.get("dicomuiDeviceName")));
                 uiDashboardConfig.setIgnoreParams(LdapUtils.stringArray(attrs.get("dicomuiIgnoreParams")));
+                uiDashboardConfig.setDockerContainers(LdapUtils.stringArray(attrs.get("dicomuiDockerContainer")));
                 String uiDashboardConfigDN = LdapUtils.dnOf("dcmuiDashboardConfigName" , uiDashboardConfig.getName(), uiConfigDN);
                 loadCompareSide(uiDashboardConfig, uiDashboardConfigDN);
                 uiConfig.addDashboardConfig(uiDashboardConfig);
@@ -1049,6 +1053,12 @@ public class LdapArchiveUIConfiguration extends LdapDicomConfigurationExtension 
         LdapUtils.storeDiff(ldapObj, mods, "dicomuiIgnoreParams",
                 prev.getIgnoreParams(),
                 uiDashboardConfig.getIgnoreParams());
+        LdapUtils.storeDiffObject(ldapObj, mods, "dcmuiShowStarBlock",
+                prev.isShowStarBlock(),
+                uiDashboardConfig.isShowStarBlock(),true);
+        LdapUtils.storeDiff(ldapObj, mods, "dicomuiDockerContainer",
+                prev.getDockerContainers(),
+                uiDashboardConfig.getDockerContainers());
         LdapUtils.storeDiffObject(ldapObj, mods,"dcmuiCountAET",
                 prev.getCountAet(),
                 uiDashboardConfig.getCountAet(), null);

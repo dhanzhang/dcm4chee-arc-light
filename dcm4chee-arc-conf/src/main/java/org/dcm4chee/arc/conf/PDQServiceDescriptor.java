@@ -57,6 +57,8 @@ public class PDQServiceDescriptor {
     private URI pdqServiceURI;
     private int[] selection = {};
     private final Map<String, String> properties = new HashMap<>();
+    private String defaultCharacterSet;
+    private Entity entity;
 
     public PDQServiceDescriptor() {
     }
@@ -104,6 +106,29 @@ public class PDQServiceDescriptor {
     public String getProperty(String name, String defValue) {
         String value = properties.get(name);
         return value != null ? value : defValue;
+    }
+
+    public String getDefaultCharacterSet() {
+        return defaultCharacterSet;
+    }
+
+    public void setDefaultCharacterSet(String defaultCharacterSet) {
+        this.defaultCharacterSet = defaultCharacterSet;
+    }
+
+    public Entity getEntity() {
+        return entity;
+    }
+
+    public void setEntity(Entity entity) {
+        switch (entity) {
+            case Study:
+            case Patient:
+                this.entity = entity;
+                break;
+            default:
+                throw new IllegalArgumentException("entity: " + entity);
+        }
     }
 
     public Map<String,String> getProperties() {

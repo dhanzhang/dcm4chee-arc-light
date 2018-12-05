@@ -46,6 +46,7 @@ import org.dcm4che3.data.VR;
 import org.dcm4che3.dict.archive.ArchiveTag;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4che3.util.TagUtils;
+import org.dcm4chee.arc.conf.AttributeSet;
 import org.dcm4chee.arc.conf.AttributesBuilder;
 
 import javax.ws.rs.core.MultivaluedMap;
@@ -65,16 +66,16 @@ public class QueryAttributes {
 
     private final ArrayList<OrderByTag> orderByTags = new ArrayList<>();
 
-    public QueryAttributes(UriInfo info) {
-        this(info.getQueryParameters());
+    public QueryAttributes(UriInfo info, Map<String, AttributeSet> attributeSetMap) {
+        this(info.getQueryParameters(), attributeSetMap);
     }
 
-    public QueryAttributes(MultivaluedMap<String, String> map) {
+    public QueryAttributes(MultivaluedMap<String, String> map, Map<String, AttributeSet> attributeSetMap) {
         for (Map.Entry<String, List<String>> entry : map.entrySet()) {
             String key = entry.getKey();
             switch (key) {
                 case "includefield":
-                    addIncludeTag(entry.getValue());
+                    addIncludeTag(entry.getValue(), attributeSetMap);
                     break;
                 case "orderby":
                     addOrderByTag(entry.getValue());
@@ -108,6 +109,7 @@ public class QueryAttributes {
                 case "queue":
                 case "SplitStudyDateRange":
                 case "ForceQueryByStudyUID":
+                case "includedefaults":
                     break;
                 case "SendingApplicationEntityTitleOfSeries":
                     keys.setString(ArchiveTag.PrivateCreator, ArchiveTag.SendingApplicationEntityTitleOfSeries, VR.AE,
@@ -124,20 +126,33 @@ public class QueryAttributes {
         }
     }
 
-    private void addIncludeTag(List<String> includefields) {
+    private void addIncludeTag(List<String> includefields, Map<String, AttributeSet> attributeSetMap) {
         for (String s : includefields) {
             if (s.equals("all")) {
                 includeAll = true;
                 break;
             }
             for (String field : StringUtils.split(s, ','))
-                try {
-                    int[] tagPath = TagUtils.parseTagPath(field);
-                    builder.setNullIfAbsent(tagPath);
-                } catch (IllegalArgumentException e2) {
-                    throw new IllegalArgumentException("includefield=" + s);
-                }
+                if (!includeAttributeSet(s, attributeSetMap))
+                    try {
+                        int[] tagPath = TagUtils.parseTagPath(field);
+                        builder.setNullIfAbsent(tagPath);
+                    } catch (IllegalArgumentException e2) {
+                        throw new IllegalArgumentException("includefield=" + s);
+                    }
         }
+    }
+
+    private boolean includeAttributeSet(String includefield, Map<String, AttributeSet> attributeSetMap) {
+        if (attributeSetMap != null) {
+            AttributeSet attributeSet = attributeSetMap.get(includefield);
+            if (attributeSet != null) {
+                for (int tag : attributeSet.getSelection())
+                    builder.setNullIfAbsent(tag);
+                return true;
+            }
+        }
+        return false;
     }
 
     public void addReturnTags(int... tags) {
@@ -168,9 +183,6 @@ public class QueryAttributes {
     }
 
     public Attributes getReturnKeys(int[] includetags) {
-        if (includeAll)
-            return null;
-
         Attributes returnKeys = new Attributes(keys.size() + 4 + includetags.length);
         returnKeys.addAll(keys);
         returnKeys.setNull(Tag.SpecificCharacterSet, VR.CS);
@@ -181,7 +193,7 @@ public class QueryAttributes {
             returnKeys.setNull(tag, DICT.vrOf(tag));
         return returnKeys;
     }
-
+    
     public ArrayList<OrderByTag> getOrderByTags() {
         return orderByTags;
     }

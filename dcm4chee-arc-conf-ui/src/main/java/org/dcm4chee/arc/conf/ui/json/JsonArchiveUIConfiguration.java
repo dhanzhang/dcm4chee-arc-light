@@ -254,8 +254,10 @@ public class JsonArchiveUIConfiguration extends JsonConfigurationExtension {
             writer.writeNotNullOrDef("dcmuiDashboardConfigName", uiDashboardConfig.getName(), null);
             writer.writeNotEmpty("dcmuiQueueName", uiDashboardConfig.getQueueNames());
             writer.writeNotEmpty("dcmuiExportName", uiDashboardConfig.getExportNames());
+            writer.writeNotDef("dcmuiShowStarBlock", uiDashboardConfig.isShowStarBlock(), true);
             writer.writeNotEmpty("dicomuiDeviceName", uiDashboardConfig.getDeviceNames());
             writer.writeNotEmpty("dicomuiIgnoreParams", uiDashboardConfig.getIgnoreParams());
+            writer.writeNotEmpty("dicomuiDockerContainer", uiDashboardConfig.getDockerContainers());
             writer.writeNotNullOrDef("dcmuiCountAET", uiDashboardConfig.getCountAet(),null);
             writeUICompareSide(writer, uiDashboardConfig.getCompareSides());
             writer.writeEnd();
@@ -654,6 +656,12 @@ public class JsonArchiveUIConfiguration extends JsonConfigurationExtension {
                         break;
                     case "dicomuiIgnoreParams":
                         uiDashboardConfig.setIgnoreParams(reader.stringArray());
+                        break;
+                    case "dcmuiShowStarBlock":
+                        uiDashboardConfig.setShowStarBlock(reader.booleanValue());
+                        break;
+                    case "dicomuiDockerContainer":
+                        uiDashboardConfig.setDockerContainers(reader.stringArray());
                         break;
                     case "dcmuiCountAET":
                         uiDashboardConfig.setCountAet(reader.stringValue());
